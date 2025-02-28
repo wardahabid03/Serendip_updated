@@ -3,25 +3,30 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:serendip/features/location/location_provider.dart';
+import 'package:serendip/features/profile.dart/provider/profile_provider.dart';
 import 'package:serendip/firebase_options.dart';
-import 'package:serendip/providers/auth_provider.dart';
-// import 'package:serendip/providers/privacy_provider.dart';
-// import 'package:serendip/providers/trip_provider.dart';
-import 'package:serendip/routes.dart'; // Import the routes file
-// import 'providers/auth_provider.dart';
-// import 'providers/location_provider.dart';
-// import 'components/marker_widget.dart';
-import 'colors.dart';
-// import 'package:serendip/providers/image_provider.dart' as custom_image_provider; // Use alias
-
+import 'package:serendip/features/Auth/auth_provider.dart';
+import 'package:serendip/core/routes.dart'; // Import the routes file
+import 'core/theme/theme.dart';
+import 'core/utils/navigator_key.dart';
+import 'features/Map_view/controller/map_controller.dart';
+import 'features/Social_Media/friend_request/friend_request_provider.dart';
+import 'features/Trip_Tracking/provider/trip_provider.dart';
+import 'services/location_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   try {
-    await Firebase.initializeApp(  options: DefaultFirebaseOptions.currentPlatform,);
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     print('Failed to initialize Firebase: $e');
   }
+
+
   runApp(MyApp());
 }
 
@@ -30,31 +35,24 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
-        //  ChangeNotifierProvider(create: (_) => custom_image_provider.ImageProvider(MarkerProvider())),
-        //  ChangeNotifierProvider(create: (_) => PrivacyProvider()),
-        // ChangeNotifierProvider(create: (_) => LocationProvider()),
-        // ChangeNotifierProvider(create: (_) => MarkerProvider()), // Ensure MarkerProvider is correct
-        //   ChangeNotifierProvider(create: (_) => TripProvider()),
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ProfileProvider()),
+        ChangeNotifierProvider(create: (_) => FriendRequestProvider()),
+        ChangeNotifierProvider(create: (_) => MapController()),
+        ChangeNotifierProvider(create: (context) => LocationProvider()),
+        ChangeNotifierProvider(create: (context) => TripProvider()),
       ],
-      child: MaterialApp(
-         debugShowCheckedModeBanner: false,
-        title: 'Serendip',
-        theme: ThemeData(
-          primaryColor: tealColor,
-          hintColor: eggShellColor,
-          scaffoldBackgroundColor: eggShellColor,
-          appBarTheme: AppBarTheme(
-            backgroundColor: tealColor,
-            foregroundColor: eggShellColor,
-          ),
-          buttonTheme: ButtonThemeData(
-            buttonColor: tealColor,
-            textTheme: ButtonTextTheme.accent,
-          ),
-        ),
-        initialRoute: AppRoutes.auth, // Define initial route
-        onGenerateRoute: AppRoutes.generateRoute, // Use the route generator
+      child: Builder(
+        builder: (context) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Serendip',
+            theme: AppTheme.lightTheme, // Use the extracted theme
+            initialRoute: AppRoutes.splash, // Define initial route
+            onGenerateRoute: AppRoutes.generateRoute, // Use the route generator
+               navigatorKey: navigatorKey, // attach the navigator key here
+          );
+        },
       ),
     );
   }

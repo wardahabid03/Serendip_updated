@@ -10,6 +10,7 @@ class PlaceDetailsBottomSheet extends StatelessWidget {
   final String category3;
   final Function(double) onDragUpdate;
   final Function(double) onDragEnd;
+  final VoidCallback onClose; // ✅ Add onClose as a field
 
   const PlaceDetailsBottomSheet({
     Key? key,
@@ -22,6 +23,7 @@ class PlaceDetailsBottomSheet extends StatelessWidget {
     required this.category3,
     required this.onDragUpdate,
     required this.onDragEnd,
+    required this.onClose, // ✅ Now properly declared
   }) : super(key: key);
 
   @override
@@ -53,13 +55,24 @@ class PlaceDetailsBottomSheet extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Fixed Place Name
-              Text(
-                placeName,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+              // Header Row with Title and Close Button
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Place Name
+                  Text(
+                    placeName,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  // Close Button ✅ Fixed onPressed
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: onClose, // ✅ Call the callback function directly
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               // Scrollable Content

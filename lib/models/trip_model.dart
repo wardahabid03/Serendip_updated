@@ -1,3 +1,4 @@
+import 'dart:convert'; // ✅ Required for JSON encoding/decoding
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:serendip/models/image_model.dart';
 
@@ -9,8 +10,8 @@ class TripModel {
   final DateTime createdAt;
   final String privacy;
   final List<String> collaborators;
-  late final List<ImageModel> images;
-  final List<LatLng> tripPath; // Coordinates representing the trip path
+  List<ImageModel> images;
+  List<LatLng> tripPath; // ✅ Now mutable (not final)
   bool isActive; // Field to track if the trip is active
 
   TripModel({
@@ -22,41 +23,45 @@ class TripModel {
     required this.privacy,
     required this.collaborators,
     required this.images,
-    required this.tripPath, // Initialize tripPath
+    required this.tripPath,
     this.isActive = true, // Default to true when the trip starts
   });
 
+  /// **✅ Converts Firestore document to a `TripModel`**
   factory TripModel.fromMap(Map<String, dynamic> data, String id) {
-    // Safely parse tripPath, ensuring latitude and longitude are valid
     List<LatLng> tripPath = [];
-  if (data['trip_path'] is List) {
-    print('Trip path data for trip $id: ${data['trip_path']}'); // Log raw trip_path data
-    tripPath = (data['trip_path'] as List).map((e) {
-      if (e['lat'] != null && e['lng'] != null) {
-        return LatLng(e['lat'].toDouble(), e['lng'].toDouble());
-      } else {
-        print('Invalid coordinates found for trip: $id'); // Log invalid coordinates
-        return null; // Return null if either latitude or longitude is missing
+
+    if (data['trip_path'] is String) {
+      try {
+        final geoJson = jsonDecode(data['trip_path']); // ✅ Decode GeoJSON string
+        if (geoJson['type'] == 'LineString' && geoJson['coordinates'] is List) {
+          tripPath = (geoJson['coordinates'] as List).map((coord) {
+            if (coord is List && coord.length == 2) {
+              return LatLng(coord[1].toDouble(), coord[0].toDouble()); // ✅ GeoJSON format [lng, lat]
+            }
+            return null;
+          }).where((point) => point != null).cast<LatLng>().toList();
+        }
+      } catch (e) {
+        print('❌ Error decoding trip_path for trip $id: $e');
       }
-    }).where((point) => point != null).cast<LatLng>().toList();
-  } else {
-    print('trip_path is not a list for trip: $id');
-  }
+    }
 
     return TripModel(
       tripId: id,
-      tripName: data['trip_name'] ?? 'Unnamed Trip', // Default name if missing
-      userId: data['user_id'] ?? '', // Default to empty string if missing
-      description: data['trip_description'] ?? '', // Default to empty if missing
-      createdAt: DateTime.parse(data['created_at']), // Expect valid date format
-      privacy: data['privacy'] ?? 'public', // Default privacy to 'public'
+      tripName: data['trip_name'] ?? 'Unnamed Trip',
+      userId: data['user_id'] ?? '',
+      description: data['trip_description'] ?? '',
+      createdAt: DateTime.tryParse(data['created_at']) ?? DateTime.now(),
+      privacy: data['privacy'] ?? 'public',
       collaborators: List<String>.from(data['collaborators'] ?? []),
-      images: (data['images'] as List).map((e) => ImageModel.fromMap(e)).toList(),
-      tripPath: tripPath, // Use the filtered tripPath
-      isActive: data['isActive'] ?? true, // Default to true if the field is missing
+      images: (data['images'] as List?)?.map((e) => ImageModel.fromMap(e)).toList() ?? [],
+      tripPath: tripPath,
+      isActive: data['isActive'] ?? true,
     );
   }
 
+  /// **✅ Converts `TripModel` to Firestore-compatible format**
   Map<String, dynamic> toMap() {
     return {
       'trip_name': tripName,
@@ -66,8 +71,11 @@ class TripModel {
       'privacy': privacy,
       'collaborators': collaborators,
       'images': images.map((e) => e.toMap()).toList(),
-      'trip_path': tripPath.map((e) => {'latitude': e.latitude, 'longitude': e.longitude}).toList(),
-      'isActive': isActive, // Add isActive to the map
+      'trip_path': jsonEncode({
+        "type": "LineString",
+        "coordinates": tripPath.map((e) => [e.longitude, e.latitude]).toList(), // ✅ Store as GeoJSON string
+      }),
+      'isActive': isActive,
     };
   }
 }

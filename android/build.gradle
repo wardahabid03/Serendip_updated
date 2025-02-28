@@ -2,6 +2,10 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+//         maven {
+//    url "${project(':background_fetch').projectDir}/libs"
+// }
+        // maven { url "https://maven.transistorsoft.com" } // ✅ Add this line
     }
 }
 

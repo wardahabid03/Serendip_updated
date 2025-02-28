@@ -45,6 +45,15 @@ dependencies:
   google_sign_in: ^6.2.2
   permission_handler: ^11.3.1
   flutter_polyline_points: ^2.1.0
+  image_picker: ^1.1.2
+  intl: ^0.20.2
+  intl_phone_number_input: ^0.7.4
+  cloudinary: ^1.2.0
+  shared_preferences: ^2.5.1
+  flutter_svg: ^2.0.17
+  lottie: ^3.2.0
+  fluttertoast: ^8.2.11
+  firebase_database: ^11.3.3
 
 dev_dependencies:
   flutter_test:
@@ -70,7 +79,13 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/images/loc.jpg
+    - assets/images/loc.png
+    - assets/images/profile.png
+    - assets/splash_image.png
+    - assets/location.json
+    - assets/images/google.svg
+    - assets/success.json
+    - assets/error.json
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
@@ -85,11 +100,15 @@ flutter:
   # "family" key with the font family name, and a "fonts" key with a
   # list giving the asset and other descriptors for the font. For
   # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Poppins-Italic.ttf
+          style: italic
   #         style: italic
   #   - family: Trajan Pro
   #     fonts:
