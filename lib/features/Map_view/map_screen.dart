@@ -155,20 +155,23 @@ class _MapScreenState extends State<MapScreen> {
     Navigator.of(context).pushReplacementNamed(AppRoutes.auth);
   }
 
-  /// Toggle trip recording using TripHelper.
   void _toggleTripRecording() async {
-    if (_isRecordingTrip) {
-      await TripHelper.stopTrip(context);
-      setState(() {
-        _isRecordingTrip = false;
-      });
-    } else {
-      await TripHelper.startTrip(context);
+  if (_isRecordingTrip) {
+    await TripHelper.stopTrip(context);
+    setState(() {
+      _isRecordingTrip = false;
+    });
+  } else {
+    bool tripStarted = await TripHelper.startTrip(context);
+    
+    // Only update state if trip actually started
+    if (tripStarted) {
       setState(() {
         _isRecordingTrip = true;
       });
     }
   }
+}
 
 Future<void> _fetchAndDisplayTrips() async {
   print("Fetching trips...");

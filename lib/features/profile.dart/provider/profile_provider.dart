@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,11 +6,16 @@ import 'package:cloudinary/cloudinary.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   int _friendsCount = 0;
+List<Map<String, dynamic>> _friendsDetails = []; // Store friends globally
+
+List<Map<String, dynamic>> get friendsDetails => _friendsDetails; // Getter
+
 
   final cloudinary = Cloudinary.signedConfig(
     apiKey: '935742635189255',
@@ -224,38 +230,61 @@ Future<int> _countFriends(String userId) async {
 
 
 
-
 Future<List<Map<String, dynamic>>> fetchFriendsDetails(String userId) async {
   List<Map<String, dynamic>> friendsDetails = [];
+  final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+  // Load cached friends immediately (if available) for instant UI update
+  String? cachedFriends = prefs.getString('friends_$userId');
+  if (cachedFriends != null) {
+    List<dynamic> cachedList = jsonDecode(cachedFriends);
+    friendsDetails = List<Map<String, dynamic>>.from(cachedList);
+    _friendsDetails = friendsDetails;
+    notifyListeners();
+    print("Loaded cached friends instantly.");
+  }
 
   try {
+    // Fetch latest data from Firestore
     final friendsSnapshot = await _firestore
         .collection('users')
         .doc(userId)
         .collection('friends')
         .get();
 
-    for (var doc in friendsSnapshot.docs) {
-      final friendData = doc.data();
-      final friendId = doc.id; // Assuming the document ID is the friend's userId
+    List<Map<String, dynamic>> freshFriends = [];
 
-      // Fetch full profile of the friend
+    for (var doc in friendsSnapshot.docs) {
+      final friendId = doc.id;
+
+      // Fetch friend's profile
       final friendProfile = await _firestore.collection('users').doc(friendId).get();
       if (friendProfile.exists) {
         final friendInfo = friendProfile.data() as Map<String, dynamic>;
-        friendsDetails.add({
-          'userId' : friendId,
+        freshFriends.add({
+          'userId': friendId,
           'username': friendInfo['username'] ?? 'Unknown',
-          'profileImage': friendInfo['profileImage'] ?? '', // Handle empty images
+          'profileImage': friendInfo['profileImage'] ?? '',
         });
       }
     }
+
+    // Update state and cache with fresh data
+    _friendsDetails = freshFriends;
+    notifyListeners();
+    await prefs.setString('friends_$userId', jsonEncode(freshFriends));
+
+    print("Fetched fresh friends data and updated cache.");
+
+    return freshFriends;
   } catch (e) {
-    print("Error fetching friend details: $e");
+    print("Error fetching friends: $e");
   }
 
-  return friendsDetails;
+  return friendsDetails; // Return cached or fetched data
 }
+
+
 
 
 
