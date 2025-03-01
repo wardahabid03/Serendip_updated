@@ -14,6 +14,7 @@ import 'package:serendip/features/recomendation_system/widgets/search_bar.dart';
 import 'package:serendip/features/Trip_Tracking/provider/trip_provider.dart';
 import 'package:serendip/features/Trip_Tracking/trip_helper.dart';
 import 'package:serendip/features/location/location_provider.dart';
+import 'package:serendip/models/trip_model.dart';
 import '../../models/places.dart';
 import '../../services/api_service.dart';
 import '../profile.dart/presentation/view_profile.dart';
@@ -24,6 +25,9 @@ import '../../core/utils/navigation_controller.dart';
 import 'package:serendip/features/Auth/auth_provider.dart';
 
 class MapScreen extends StatefulWidget {
+    final TripModel? trip; // Accepts a Trip model directly
+
+  const MapScreen({Key? key, this.trip}) : super(key: key);
   @override
   _MapScreenState createState() => _MapScreenState();
 }
@@ -49,13 +53,21 @@ class _MapScreenState extends State<MapScreen> {
   // Trip filter value
   String _selectedTripFilter = "My Trips"; // Options: "My Trips", "Friends' Trips", "Collaborated Trips"
 
-  @override
-  void initState() {
-    super.initState();
-    _initializeLayers();
-    _getUserLocation();
-    // _fetchTrips(); // Fetch trips on init (they won't display unless user toggles the view)
-  }
+ @override
+void initState() {
+  super.initState();
+  _initializeLayers();
+  _getUserLocation();
+  
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    if (widget.trip != null) {
+      _displayTrip(widget.trip!);
+    }
+  });
+}
+
+
+
 
   void _onNavBarItemSelected(int index) {
     setState(() {
@@ -139,6 +151,26 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
+void _displayTrip(TripModel trip) {
+    print("Displaying trip: ${trip}");
+
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
+
+    if (tripsLayer == null) {
+      print("TripsLayer not found.");
+      return;
+    }
+
+    tripsLayer.clear();
+    tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
+
+    if (trip.tripPath.isNotEmpty) {
+      mapController.moveCamera(trip.tripPath.first, zoom: 12);
+    }
+
+    setState(() {}); // Refresh UI
+  }
 
 
   void _clearMap() {
@@ -225,6 +257,36 @@ void _updateTripsLayer() {
 }
 
 
+Future<void> _loadTripById(String tripId) async {
+  print("Loading trip with ID: $tripId");
+
+  final tripProvider = Provider.of<TripProvider>(context, listen: false);
+  final mapController = Provider.of<MapController>(context, listen: false);
+  final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
+
+  if (tripsLayer == null) {
+    print("TripsLayer not found.");
+    return;
+  }
+
+  // Fetch the specific trip
+  final trip = await tripProvider.fetchTripById(tripId);
+  if (trip == null) {
+    print("Trip not found.");
+    return;
+  }
+
+  tripsLayer.clear(); // Clear previous trips
+  tripsLayer.addTripPolyline(trip.tripPath, trip.tripId); // Display only this trip
+
+  print("Trip displayed on map: ${trip.tripId}");
+
+  if (trip.tripPath.isNotEmpty) {
+    mapController.moveCamera(trip.tripPath.first, zoom: 12); // Center on first point
+  }
+
+  setState(() {}); // Refresh UI
+}
 
   /// Show trip filter options via bottom sheet.
   void _showTripFilters() {

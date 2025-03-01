@@ -5,6 +5,7 @@ import '../../../core/routes.dart';
 import '../../../core/utils/bottom_nav_bar.dart';
 import '../../../core/utils/navigation_controller.dart';
 import '../../../models/friend_request_model.dart';
+import '../../../models/trip_model.dart';
 import '../../Social_Media/friend_request/friend_request_provider.dart';
 import '../provider/profile_provider.dart';
 import '../../../core/constant/colors.dart';
@@ -576,70 +577,77 @@ Widget _buildFriendActionButton(Map<String, dynamic> profile) {
     );
   }
 
-  Widget _buildTripsSection(Map<String, dynamic> profile) {
-    final trips = profile['trips'] as List<dynamic>? ?? [];
-    
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Recent Trips',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
+Widget _buildTripsSection(Map<String, dynamic> profile) {
+  final trips = profile['trips'] as List<dynamic>? ?? [];
+  
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Recent Trips',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
-            if (trips.isNotEmpty)
-              TextButton(
-                onPressed: () {
-                  // Navigate to all trips
+          ),
+          if (trips.isNotEmpty)
+            TextButton(
+              onPressed: () {
+                // Navigate to all trips
+              },
+              child: const Text('See All'),
+            ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      if (trips.isEmpty)
+        Container(
+          height: 200,
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.map_outlined, size: 48, color: Colors.grey),
+                SizedBox(height: 8),
+                Text(
+                  'No trips yet',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        )
+      else
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: trips.length,
+            itemBuilder: (context, index) {
+              final trip = trips[index];
+
+              return GestureDetector(
+                onTap: () {
+                  print('trip: ${trip['tripId']}'); // ✅ Corrected tripId access
+
+                  Navigator.pushNamed(
+                    context,
+                    AppRoutes.map,
+                    arguments: {'trip': trip}, // ✅ Directly pass the Map
+                  );
                 },
-                child: const Text('See All'),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (trips.isEmpty)
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-                  SizedBox(height: 8),
-                  Text(
-                    'No trips yet',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: trips.length,
-              itemBuilder: (context, index) {
-                final trip = trips[index];
-                return Container(
+                child: Container(
                   width: 200,
                   margin: const EdgeInsets.only(right: 16),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
-                    // image: DecorationImage(
-                    //   image: NetworkImage(trip['coverImage']),
-                    //   fit: BoxFit.cover,
-                    // ),
                   ),
                   child: Container(
                     decoration: BoxDecoration(
@@ -667,24 +675,25 @@ Widget _buildFriendActionButton(Map<String, dynamic> profile) {
                           ),
                         ),
                         const SizedBox(height: 4),
-                      Text(
-  _formatDate(trip['created_at']),
-  style: const TextStyle(
-    color: Colors.white70,
-    fontSize: 12,
-  ),
-),
-
+                        Text(
+                          _formatDate(trip['created_at']), // ✅ Handle different date formats
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
-      ],
-    );
-  }
+        ),
+    ],
+  );
+}
+
 
   Widget _buildPhotosSection(Map<String, dynamic> profile) {
     final photos = profile['photos'] as List<dynamic>? ?? [];

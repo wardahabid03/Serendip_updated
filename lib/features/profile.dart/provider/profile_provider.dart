@@ -126,6 +126,9 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
     // Fetch user's trips
     List<Map<String, dynamic>> trips = await fetchUserTrips(userId: uid);
 
+    // Extract trip IDs separately
+    List<String> tripIds = trips.map((trip) => trip['tripId'] as String).toList();
+
     // Fetch friends count and details
     _isProfileComplete = data['isProfileComplete'] ?? false;
     int friendsCount = await _countFriends(uid);
@@ -142,13 +145,15 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
       'friendsCount': friendsCount,
       'friendsDetails': friendsDetails,
       'areFriends': areFriends,  // Add this to indicate friendship status
-      'trips': trips,  // Include user's trips in profile data
+      'tripIds': tripIds,  // ✅ Return trip IDs separately
+      'trips': trips,  // ✅ Include full trip details
     };
   } catch (e) {
     print("Error fetching profile: $e");
     throw Exception('Failed to fetch profile: ${e.toString()}');
   }
 }
+
 
 
 
@@ -176,7 +181,13 @@ Future<List<Map<String, dynamic>>> fetchUserTrips({required String userId}) asyn
         .where(FieldPath.documentId, whereIn: tripIds)
         .get();
 
-    List<Map<String, dynamic>> trips = tripSnapshot.docs.map((doc) => doc.data()).toList();
+    // Include trip ID in the response
+    List<Map<String, dynamic>> trips = tripSnapshot.docs.map((doc) {
+      return {
+        'tripId': doc.id,  // ✅ Include trip ID
+        ...doc.data(),      // ✅ Include other trip details
+      };
+    }).toList();
 
     print("Fetched ${trips.length} trips for user: $userId");
 

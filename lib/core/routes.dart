@@ -7,6 +7,7 @@ import 'package:serendip/features/Splash_Screen/splash_screen.dart';
 import 'package:serendip/features/Walkthrough/walkthrough_screen.dart';
 import 'package:serendip/features/profile.dart/presentation/profile_screen.dart';
 import 'package:serendip/features/profile.dart/setting_screen.dart';
+import 'package:serendip/models/trip_model.dart';
 
 import '../features/Map_view/map_screen.dart';
 import '../features/profile.dart/presentation/view_profile.dart';
@@ -32,8 +33,20 @@ class AppRoutes {
     switch (settings.name) {
       // case home:
       //   return MaterialPageRoute(builder: (_) => HomeScreen());
-      case map:
-        return MaterialPageRoute(builder: (_) => MapScreen());
+case map:
+  final args = settings.arguments as Map<String, dynamic>?;
+
+  final TripModel? trip = args?['trip'] != null
+      ? TripModel.fromMap(args!['trip'], args['trip']['tripId']) // ✅ Extract tripId properly
+      : null;
+
+  return MaterialPageRoute(
+    builder: (_) => MapScreen(trip: trip),
+  );
+
+
+
+
       case auth:
         return MaterialPageRoute(builder: (_) => AuthScreen());
       case find_friends:

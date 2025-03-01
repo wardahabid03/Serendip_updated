@@ -16,9 +16,16 @@ class TripProvider with ChangeNotifier {
   bool get isRecording => _isRecording;
   List<TripModel> get trips => _trips;
 
+  /// **Start a new trip**
   void startTrip(String tripName, String userId, String description, String privacy, List<String> collaborators, LatLng startLocation) {
     _tripPath.clear();
     _isRecording = true;
+
+    // Ensure the creator is also in the collaborators list
+    if (!collaborators.contains(userId)) {
+      collaborators.add(userId);
+    }
+
     _currentTrip = TripModel(
       tripId: const Uuid().v4(),
       tripName: tripName,
@@ -31,10 +38,12 @@ class TripProvider with ChangeNotifier {
       tripPath: [],
       isActive: true,
     );
+
     _tripPath.add(startLocation);
     notifyListeners();
   }
 
+  /// **Add location during trip recording**
   void addLocation(LatLng location) {
     if (_isRecording) {
       _tripPath.add(location);
@@ -42,6 +51,7 @@ class TripProvider with ChangeNotifier {
     }
   }
 
+  /// **Stop the trip and save it**
   Future<void> stopTrip(LatLng endLocation) async {
     if (_currentTrip == null) return;
 
@@ -51,12 +61,20 @@ class TripProvider with ChangeNotifier {
     _currentTrip!.isActive = false;
 
     String tripId = await _saveTripToFirestore();
+    
+    // Save the trip ID in the user's document
     await addTripToUser(_currentTrip!.userId, tripId);
+
+    // Save the trip ID in each collaborator's user document
+    for (String collaboratorId in _currentTrip!.collaborators) {
+      await addTripToUser(collaboratorId, tripId);
+    }
 
     _currentTrip = null;
     notifyListeners();
   }
 
+  /// **Save the trip to Firestore**
   Future<String> _saveTripToFirestore() async {
     if (_currentTrip == null) return '';
 
@@ -67,8 +85,9 @@ class TripProvider with ChangeNotifier {
     return _currentTrip!.tripId;
   }
 
+  /// **Add trip ID to a user's document in Firestore**
   Future<void> addTripToUser(String userId, String tripId) async {
-    final userRef = FirebaseFirestore.instance.collection('users').doc(userId);
+    final userRef = _firestore.collection('users').doc(userId);
 
     await userRef.update({
       'trips': FieldValue.arrayUnion([tripId]),
@@ -76,59 +95,78 @@ class TripProvider with ChangeNotifier {
     });
   }
 
- /// Fetch trips based on filter criteria
-Future<void> fetchTrips({required String userId, required String filter}) async {
-  QuerySnapshot tripSnapshot;
+  /// **Fetch trips based on filter criteria**
+  Future<void> fetchTrips({required String userId, required String filter}) async {
+    QuerySnapshot tripSnapshot;
 
-  if (filter == 'My Trips') {
-    tripSnapshot = await _firestore
-        .collection('trips')
-        .where('user_id', isEqualTo: userId)
-        .get();
-  } 
-  
-  else if (filter == 'Friends\' Trips') {
-    List<String> friends = [];
-
-    // Fetch friends' IDs from the 'friends' subcollection
-    final friendsSnapshot = await _firestore
-        .collection('users')
-        .doc(userId)
-        .collection('friends')
-        .get();
-
-    friends = friendsSnapshot.docs.map((doc) => doc.id).toList();
-
-    print("Fetched Friends' IDs: $friends");
-
-    if (friends.isNotEmpty) {
-      // Fetch only friends' trips with privacy "friends" or "public"
+    if (filter == 'My Trips') {
       tripSnapshot = await _firestore
           .collection('trips')
-          .where('user_id', whereIn: friends)
-          .where('privacy', whereIn: ['friends', 'public']) // Filter privacy
+          .where('user_id', isEqualTo: userId)
           .get();
-    } else {
-      print("No friends found, skipping trips fetch.");
-      return;
+    } 
+    
+    else if (filter == 'Friends\' Trips') {
+      List<String> friends = [];
+
+      // Fetch friends' IDs from the 'friends' subcollection
+      final friendsSnapshot = await _firestore
+          .collection('users')
+          .doc(userId)
+          .collection('friends')
+          .get();
+
+      friends = friendsSnapshot.docs.map((doc) => doc.id).toList();
+
+      print("Fetched Friends' IDs: $friends");
+
+      if (friends.isNotEmpty) {
+        // Fetch only friends' trips with privacy "friends" or "public"
+        tripSnapshot = await _firestore
+            .collection('trips')
+            .where('user_id', whereIn: friends)
+            .where('privacy', whereIn: ['friends', 'public']) // Filter privacy
+            .get();
+      } else {
+        print("No friends found, skipping trips fetch.");
+        return;
+      }
+    } 
+    
+    else {
+      tripSnapshot = await _firestore
+          .collection('trips')
+          .where('collaborators', arrayContains: userId)
+          .get();
     }
-  } 
-  
-  else {
-    tripSnapshot = await _firestore
-        .collection('trips')
-        .where('collaborators', arrayContains: userId)
-        .get();
+
+    _trips = tripSnapshot.docs
+        .map((doc) => TripModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .toList();
+
+        
+
+    notifyListeners();
   }
 
-  _trips = tripSnapshot.docs
-      .map((doc) => TripModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-      .toList();
 
-  notifyListeners();
+
+Future<TripModel?> fetchTripById(String tripId) async {
+  try {
+    final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripId).get();
+    if (!tripDoc.exists) return null;
+
+    final data = tripDoc.data();
+    if (data == null) return null;
+
+    return TripModel.fromMap(data, tripDoc.id); // ✅ Convert Firestore data to TripModel
+  } catch (e) {
+    print("❌ Error fetching trip: $e");
+    return null;
+  }
 }
- 
+
+
+
+
 }
-
-
-
