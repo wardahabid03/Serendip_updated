@@ -151,7 +151,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildProfileHeader(profile),
+                  _buildProfileHeader(profile,context),
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -290,71 +290,94 @@ String _getButtonText(String status) {
   }
 }
 
-  Widget _buildProfileHeader(Map<String, dynamic> profile) {
-    return Container(
-      color: tealSwatch.withOpacity(0.1),
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 60,
-                backgroundImage: profile['profileImage'] != null && profile['profileImage'].isNotEmpty
-                    ? NetworkImage(profile['profileImage'])
-                    : const AssetImage('assets/images/profile.png') as ImageProvider,
-              ),
-              if (_isCurrentUser)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: tealSwatch,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.edit,
-                      color: Colors.white,
-                      size: 20,
-                    ),
+Widget _buildProfileHeader(Map<String, dynamic> profile, BuildContext context) {
+  return Container(
+    color: tealSwatch.withOpacity(0.1),
+    padding: const EdgeInsets.all(24.0),
+    child: Column(
+      children: [
+        Stack(
+          children: [
+            CircleAvatar(
+              radius: 60,
+              backgroundImage: profile['profileImage'] != null && profile['profileImage'].isNotEmpty
+                  ? NetworkImage(profile['profileImage'])
+                  : const AssetImage('assets/images/profile.png') as ImageProvider,
+            ),
+            if (_isCurrentUser)
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: tealSwatch,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: 20,
                   ),
                 ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(
-            profile['username'] ?? 'User',
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          if (_isCurrentUser || profile['isPublic'] || profile['areFriends']) ...[
-            const SizedBox(height: 8),
-            if (profile['location'] != null && profile['location'].isNotEmpty)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    profile['location'],
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.grey[600],
-                    ),
-                  ),
-                ],
               ),
           ],
-          const SizedBox(height: 16),
-          if (!_isCurrentUser) _buildFriendActionButton(profile),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          profile['username'] ?? 'User',
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (_isCurrentUser || profile['isPublic'] || profile['areFriends']) ...[
+          const SizedBox(height: 8),
+          if (profile['location'] != null && profile['location'].isNotEmpty)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(
+                  profile['location'],
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
         ],
-      ),
-    );
-  }
+        const SizedBox(height: 16),
+
+        // Show Friend Action & Chat Button only if it's NOT the current user
+        if (!_isCurrentUser) ...[
+          _buildFriendActionButton(profile),
+          const SizedBox(height: 12),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                '/chatScreen', // Replace with the actual route name
+                arguments: {'userId': profile['id'], 'username': profile['username']},
+              );
+            },
+            icon: const Icon(Icons.chat, size: 20),
+            label: const Text("Chat"),
+            style: ElevatedButton.styleFrom(
+              foregroundColor: Colors.white,
+              backgroundColor: tealSwatch,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 
 Widget _buildFriendActionButton(Map<String, dynamic> profile) {
   // Get the FriendRequestProvider

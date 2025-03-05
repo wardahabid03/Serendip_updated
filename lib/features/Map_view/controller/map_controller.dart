@@ -10,7 +10,7 @@ class MapController extends ChangeNotifier {
   final TripsLayer _tripsLayer = TripsLayer();
 
   MapController() {
-    _layers['trips_layer'] = _tripsLayer; // Register trips layer
+    addLayer('trips_layer', _tripsLayer); // ✅ Register TripsLayer properly
     _activeLayers.add('trips_layer');
   }
 
@@ -24,8 +24,6 @@ class MapController extends ChangeNotifier {
 
   void addLayer(String layerId, MapLayer layer) {
     _layers[layerId] = layer;
-
-    // ✅ Fix: Defer UI updates to avoid Flutter build errors
     Future.microtask(() {
       notifyListeners();
     });
@@ -37,8 +35,6 @@ class MapController extends ChangeNotifier {
     } else {
       _activeLayers.remove(layerId);
     }
-
-    // ✅ Fix: Ensure safe UI updates
     Future.microtask(() {
       notifyListeners();
     });
@@ -83,7 +79,6 @@ class MapController extends ChangeNotifier {
     }
   }
 
-  // 🔹 Add a trip polyline dynamically
   void addTripPolyline(List<LatLng> path, String tripId) {
     _tripsLayer.addTripPolyline(path, tripId);
     Future.microtask(() {
@@ -91,7 +86,17 @@ class MapController extends ChangeNotifier {
     });
   }
 
-  // 🔹 Clears all trips from the map
+
+  Set<Circle> get circles {
+  Set<Circle> allCircles = {};
+  for (var layerId in _activeLayers) {
+    allCircles.addAll(_layers[layerId]?.getCircles() ?? {});
+  }
+  return allCircles;
+}
+
+
+
   void clearAllTrips() {
     _tripsLayer.clear();
     Future.microtask(() {

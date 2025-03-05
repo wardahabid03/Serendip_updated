@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:serendip/features/chat.dart/chat_provider.dart';
 import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/features/profile.dart/provider/profile_provider.dart';
 import 'package:serendip/firebase_options.dart';
@@ -41,6 +42,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MapController()),
         ChangeNotifierProvider(create: (context) => LocationProvider()),
         ChangeNotifierProvider(create: (context) => TripProvider()),
+        ChangeNotifierProvider(create: (context) => ChatProvider()),
       ],
       child: Builder(
         builder: (context) {

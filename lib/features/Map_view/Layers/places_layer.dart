@@ -8,7 +8,7 @@ import 'map_layer.dart';
 import 'package:flutter/material.dart';
 
 
-class PlacesLayer implements MapLayer {
+class PlacesLayer implements MapLayer{
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
   final Map<String, Polyline> _polylines = {}; // Store polylines with unique IDs
@@ -148,4 +148,7 @@ class PlacesLayer implements MapLayer {
     
     return earthRadius * c;
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

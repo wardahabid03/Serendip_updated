@@ -54,6 +54,10 @@ dependencies:
   lottie: ^3.2.0
   fluttertoast: ^8.2.11
   firebase_database: ^11.3.3
+  image: 4.3.0
+  firebase_storage: ^12.4.4
+  video_player: ^2.9.3
+ 
 
 dev_dependencies:
   flutter_test:
@@ -86,6 +90,8 @@ flutter:
     - assets/images/google.svg
     - assets/success.json
     - assets/error.json
+    - assets/images/pin2.png
+    - assets/images/pin.png
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

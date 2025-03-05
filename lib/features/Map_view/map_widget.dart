@@ -24,6 +24,7 @@ class SharedMapWidget extends StatelessWidget {
           ),
           markers: controller.markers,
           polylines: controller.polylines,
+          circles: controller.circles, // ✅ Ensure circles are included
           onMapCreated: (GoogleMapController mapController) {
             controller.setController(mapController);
           },

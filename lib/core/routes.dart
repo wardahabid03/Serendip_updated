@@ -10,6 +10,7 @@ import 'package:serendip/features/profile.dart/setting_screen.dart';
 import 'package:serendip/models/trip_model.dart';
 
 import '../features/Map_view/map_screen.dart';
+import '../features/chat.dart/chat_screen.dart';
 import '../features/profile.dart/presentation/view_profile.dart';
 // import 'package:serendip/screens/map_screen.dart';
 // import 'package:your_app/screens/home/home_screen.dart';
@@ -28,6 +29,7 @@ class AppRoutes {
   static const String view_profile = '/view_profile';
   static const String settingsscreen = '/settingsscreen';
   static const String view_requests = '/view_requests';
+  static const String chat = '/chat';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -62,10 +64,19 @@ case map:
          case view_requests:
         return MaterialPageRoute(builder: (_) => FriendRequestPage());
         
+        
       case view_profile:
         return MaterialPageRoute(
           builder: (_) =>
               ViewProfileScreen(userId: settings.arguments as String?),
+        );
+         case chat: // ✅ Handle Chat Route
+        final args = settings.arguments as Map<String, dynamic>;
+        return MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            userId: args['userId'],
+            username: args['username'],
+          ),
         );
 
       // case details:

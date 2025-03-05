@@ -227,6 +227,7 @@ class TripHelper {
 
   /// **Start a new trip**
   static Future<bool> startTrip(BuildContext context) async {
+
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -240,7 +241,7 @@ class TripHelper {
     if (tripDetails == null) return false;
 
     tripProvider.startTrip(tripDetails["name"], userId, tripDetails["description"], tripDetails["privacy"], List<String>.from(tripDetails["collaborators"]), userLocation);
-
+    print('trip started');
     return true;
   }
 

@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:serendip/models/user_model.dart';
 import 'map_layer.dart';
@@ -63,4 +64,7 @@ class FriendsLayer implements MapLayer {
   void onTap(LatLng position) {
     // TODO: implement onTap
   }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

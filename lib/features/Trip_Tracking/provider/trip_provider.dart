@@ -17,39 +17,53 @@ class TripProvider with ChangeNotifier {
   List<TripModel> get trips => _trips;
 
   /// **Start a new trip**
-  void startTrip(String tripName, String userId, String description, String privacy, List<String> collaborators, LatLng startLocation) {
-    _tripPath.clear();
-    _isRecording = true;
+void startTrip(String tripName, String userId, String description, String privacy, List<String> collaborators, LatLng startLocation) {
+  print("🚀 startTrip() called in TripProvider!");
 
-    // Ensure the creator is also in the collaborators list
-    if (!collaborators.contains(userId)) {
-      collaborators.add(userId);
-    }
+  _tripPath.clear();
+  _isRecording = true;
 
-    _currentTrip = TripModel(
-      tripId: const Uuid().v4(),
-      tripName: tripName,
-      userId: userId,
-      description: description,
-      createdAt: DateTime.now(),
-      privacy: privacy,
-      collaborators: collaborators,
-      images: [],
-      tripPath: [],
-      isActive: true,
-    );
-
-    _tripPath.add(startLocation);
-    notifyListeners();
+  // Ensure the creator is also in the collaborators list
+  if (!collaborators.contains(userId)) {
+    collaborators.add(userId);
   }
+
+  _currentTrip = TripModel(
+    tripId: const Uuid().v4(),
+    tripName: tripName,
+    userId: userId,
+    description: description,
+    createdAt: DateTime.now(),
+    privacy: privacy,
+    collaborators: collaborators,
+    images: [],
+    tripPath: [],
+    isActive: true,
+  );
+
+  // ✅ Ensure start location is added
+  print("📍 Adding first location: $startLocation");
+  _tripPath.add(startLocation);
+  _currentTrip!.tripPath.add(startLocation); // ✅ Add it to the TripModel
+
+  notifyListeners();
+  print("🔄 notifyListeners() called after starting trip!");
+}
+
 
   /// **Add location during trip recording**
-  void addLocation(LatLng location) {
-    if (_isRecording) {
-      _tripPath.add(location);
-      notifyListeners();
-    }
+void addLocation(LatLng location) {
+  if (_isRecording) {
+    print("📍 New location added: $location");
+    _tripPath.add(location);
+    notifyListeners();
+    print("🔄 notifyListeners() called after adding location!");
+  } else {
+    print("⚠️ Tried to add location, but recording is off!");
   }
+}
+
+
 
   /// **Stop the trip and save it**
   Future<void> stopTrip(LatLng endLocation) async {
@@ -65,7 +79,6 @@ class TripProvider with ChangeNotifier {
     // Save the trip ID in the user's document
     await addTripToUser(_currentTrip!.userId, tripId);
 
-    // Save the trip ID in each collaborator's user document
     for (String collaboratorId in _currentTrip!.collaborators) {
       await addTripToUser(collaboratorId, tripId);
     }
@@ -109,7 +122,6 @@ class TripProvider with ChangeNotifier {
     else if (filter == 'Friends\' Trips') {
       List<String> friends = [];
 
-      // Fetch friends' IDs from the 'friends' subcollection
       final friendsSnapshot = await _firestore
           .collection('users')
           .doc(userId)
@@ -118,17 +130,13 @@ class TripProvider with ChangeNotifier {
 
       friends = friendsSnapshot.docs.map((doc) => doc.id).toList();
 
-      print("Fetched Friends' IDs: $friends");
-
       if (friends.isNotEmpty) {
-        // Fetch only friends' trips with privacy "friends" or "public"
         tripSnapshot = await _firestore
             .collection('trips')
             .where('user_id', whereIn: friends)
-            .where('privacy', whereIn: ['friends', 'public']) // Filter privacy
+            .where('privacy', whereIn: ['friends', 'public']) 
             .get();
       } else {
-        print("No friends found, skipping trips fetch.");
         return;
       }
     } 
@@ -144,29 +152,20 @@ class TripProvider with ChangeNotifier {
         .map((doc) => TripModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
 
-        
-
     notifyListeners();
   }
 
+  Future<TripModel?> fetchTripById(String tripId) async {
+    try {
+      final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripId).get();
+      if (!tripDoc.exists) return null;
 
+      final data = tripDoc.data();
+      if (data == null) return null;
 
-Future<TripModel?> fetchTripById(String tripId) async {
-  try {
-    final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripId).get();
-    if (!tripDoc.exists) return null;
-
-    final data = tripDoc.data();
-    if (data == null) return null;
-
-    return TripModel.fromMap(data, tripDoc.id); // ✅ Convert Firestore data to TripModel
-  } catch (e) {
-    print("❌ Error fetching trip: $e");
-    return null;
+      return TripModel.fromMap(data, tripDoc.id);
+    } catch (e) {
+      return null;
+    }
   }
-}
-
-
-
-
 }

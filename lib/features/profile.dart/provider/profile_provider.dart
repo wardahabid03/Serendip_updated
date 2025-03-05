@@ -15,6 +15,8 @@ class ProfileProvider extends ChangeNotifier {
 List<Map<String, dynamic>> _friendsDetails = []; // Store friends globally
 
 List<Map<String, dynamic>> get friendsDetails => _friendsDetails; // Getter
+  String get currentUserId => _auth.currentUser?.uid ?? '';
+
 
 
   final cloudinary = Cloudinary.signedConfig(

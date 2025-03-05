@@ -7,6 +7,7 @@ import 'package:serendip/core/constant/colors.dart';
 import 'package:serendip/features/Auth/auth_provider.dart';
 import 'package:serendip/core/routes.dart';
 import 'package:serendip/features/Map_view/controller/map_controller.dart';
+import 'package:serendip/features/Map_view/layers/map_layer.dart';
 import 'package:serendip/features/Map_view/map_widget.dart';
 import 'package:serendip/features/Map_view/layers/places_layer.dart';
 import 'package:serendip/features/Map_view/layers/trips_layer.dart';
@@ -17,6 +18,7 @@ import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/models/trip_model.dart';
 import '../../models/places.dart';
 import '../../services/api_service.dart';
+import '../chat.dart/contacts_screen.dart';
 import '../profile.dart/presentation/view_profile.dart';
 import '../recomendation_system/widgets/place_details_bottom_sheet.dart';
 import '../recomendation_system/widgets/place_list.dart';
@@ -25,7 +27,7 @@ import '../../core/utils/navigation_controller.dart';
 import 'package:serendip/features/Auth/auth_provider.dart';
 
 class MapScreen extends StatefulWidget {
-    final TripModel? trip; // Accepts a Trip model directly
+  final TripModel? trip; // Accepts a Trip model directly
 
   const MapScreen({Key? key, this.trip}) : super(key: key);
   @override
@@ -51,23 +53,21 @@ class _MapScreenState extends State<MapScreen> {
   int _selectedIndex = 0;
 
   // Trip filter value
-  String _selectedTripFilter = "My Trips"; // Options: "My Trips", "Friends' Trips", "Collaborated Trips"
+  String _selectedTripFilter =
+      "My Trips"; // Options: "My Trips", "Friends' Trips", "Collaborated Trips"
 
- @override
-void initState() {
-  super.initState();
-  _initializeLayers();
-  _getUserLocation();
-  
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    if (widget.trip != null) {
-      _displayTrip(widget.trip!);
-    }
-  });
-}
+  @override
+  void initState() {
+    super.initState();
+    _initializeLayers();
+    _getUserLocation();
 
-
-
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.trip != null) {
+        _displayTrip(widget.trip!);
+      }
+    });
+  }
 
   void _onNavBarItemSelected(int index) {
     setState(() {
@@ -82,12 +82,13 @@ void initState() {
     mapController.addLayer(PLACES_LAYER, PlacesLayer());
     mapController.toggleLayer(PLACES_LAYER, true);
     // Add TripsLayer for trip routes/markers
-    mapController.addLayer(TRIPS_LAYER, TripsLayer());
+    mapController.addLayer(TRIPS_LAYER, TripsLayer() as MapLayer);
     mapController.toggleLayer(TRIPS_LAYER, true);
   }
 
   Future<void> _getUserLocation() async {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider =
+        Provider.of<LocationProvider>(context, listen: false);
     final mapController = Provider.of<MapController>(context, listen: false);
     setState(() {
       _userLocation = locationProvider.currentLocation ?? LatLng(0, 0);
@@ -95,7 +96,7 @@ void initState() {
     mapController.moveCamera(_userLocation);
   }
 
-    Future<void> _searchPlaces() async {
+  Future<void> _searchPlaces() async {
     String query = _searchController.text.trim();
     if (query.isEmpty) return;
 
@@ -144,18 +145,19 @@ void initState() {
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not move map to selected location. Please try again.'),
+          content: Text(
+              'Could not move map to selected location. Please try again.'),
           duration: Duration(seconds: 2),
         ),
       );
     }
   }
 
-void _displayTrip(TripModel trip) {
+  void _displayTrip(TripModel trip) {
     print("Displaying trip: ${trip}");
 
     final mapController = Provider.of<MapController>(context, listen: false);
-    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
+    final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
 
     if (tripsLayer == null) {
       print("TripsLayer not found.");
@@ -172,7 +174,6 @@ void _displayTrip(TripModel trip) {
     setState(() {}); // Refresh UI
   }
 
-
   void _clearMap() {
     final mapController = Provider.of<MapController>(context, listen: false);
     mapController.clearAllLayers();
@@ -188,105 +189,136 @@ void _displayTrip(TripModel trip) {
   }
 
   void _toggleTripRecording() async {
-  if (_isRecordingTrip) {
-    await TripHelper.stopTrip(context);
-    setState(() {
-      _isRecordingTrip = false;
-    });
-  } else {
-    bool tripStarted = await TripHelper.startTrip(context);
-    
-    // Only update state if trip actually started
-    if (tripStarted) {
-      setState(() {
-        _isRecordingTrip = true;
-      });
-    }
-  }
-}
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
 
-Future<void> _fetchAndDisplayTrips() async {
-  print("Fetching trips...");
+    if (tripsLayer == null) return;
 
-  final tripProvider = Provider.of<TripProvider>(context, listen: false);
-  final userId = FirebaseAuth.instance.currentUser?.uid;
-  
-  if (userId == null) {
-    print("No user logged in. Cannot fetch trips.");
-    return;
-  }
-
-  print("Fetching trips for user ID: $userId with filter: $_selectedTripFilter");
-  
-  await tripProvider.fetchTrips(userId: userId, filter: _selectedTripFilter);
-  
-  print("Trips fetched: ${tripProvider.trips.length}");
-  
-  _updateTripsLayer();
-}
-
-/// Update the TripsLayer with fetched trips.
-void _updateTripsLayer() {
-  print("Updating TripsLayer...");
-
-  final tripProvider = Provider.of<TripProvider>(context, listen: false);
-  final mapController = Provider.of<MapController>(context, listen: false);
-  final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
-
-  if (tripsLayer == null) {
-    print("TripsLayer not found.");
-    return;
-  }
-
-  tripsLayer.clear();
-  print("Cleared previous trip data.");
-
-  for (var trip in tripProvider.trips) {
-    if (trip.tripPath.isNotEmpty) {
-      print("Adding trip: ${trip.tripId}, Points: ${trip.tripPath.length}");
+    if (_isRecordingTrip) {
+      await TripHelper.stopTrip(context);
+      setState(() => _isRecordingTrip = false);
+      tripsLayer.clear();
+      tripProvider.removeListener(_updateActiveTripLayer); // ✅ Remove listener
     } else {
-      print("Skipping trip ${trip.tripId} (empty path)");
+      bool tripStarted = await TripHelper.startTrip(context);
+      if (tripStarted) {
+        setState(() => _isRecordingTrip = true);
+        tripProvider.addListener(_updateActiveTripLayer); // ✅ Add listener
+        _updateActiveTripLayer();
+      }
     }
-    tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
   }
 
-  print("Active polylines: ${tripsLayer.getPolylines().length}");
-  print("Active markers: ${tripsLayer.getMarkers().length}");
+  void _updateActiveTripLayer() {
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
 
-  setState(() {}); // Refresh UI
-}
+    // ✅ Ensure tripsLayer is not null before calling methods
+    if (tripsLayer is TripsLayer && tripProvider.currentTrip != null) {
+      final tripPath = tripProvider.currentTrip!.tripPath;
 
+      if (tripsLayer == null) {
+        print("TripsLayer not found.");
+        return;
+      }
+      print('trip active');
+      // ✅ Add teal-colored polyline
+      tripsLayer.addTripPolyline(tripPath, "active_trip");
 
-Future<void> _loadTripById(String tripId) async {
-  print("Loading trip with ID: $tripId");
+      // ✅ Add animated recording effect
+      tripsLayer.addRecordingTripEffect(tripPath.last);
 
-  final tripProvider = Provider.of<TripProvider>(context, listen: false);
-  final mapController = Provider.of<MapController>(context, listen: false);
-  final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
-
-  if (tripsLayer == null) {
-    print("TripsLayer not found.");
-    return;
+      // ✅ Move camera to follow the trip
+      mapController.moveCamera(tripPath.last, zoom: 14);
+    }
   }
 
-  // Fetch the specific trip
-  final trip = await tripProvider.fetchTripById(tripId);
-  if (trip == null) {
-    print("Trip not found.");
-    return;
+  Future<void> _fetchAndDisplayTrips() async {
+    print("Fetching trips...");
+
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
+    if (userId == null) {
+      print("No user logged in. Cannot fetch trips.");
+      return;
+    }
+
+    print(
+        "Fetching trips for user ID: $userId with filter: $_selectedTripFilter");
+
+    await tripProvider.fetchTrips(userId: userId, filter: _selectedTripFilter);
+
+    print("Trips fetched: ${tripProvider.trips.length}");
+
+    _updateTripsLayer();
   }
 
-  tripsLayer.clear(); // Clear previous trips
-  tripsLayer.addTripPolyline(trip.tripPath, trip.tripId); // Display only this trip
+  /// Update the TripsLayer with fetched trips.
+  void _updateTripsLayer() {
+    print("Updating TripsLayer...");
 
-  print("Trip displayed on map: ${trip.tripId}");
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
 
-  if (trip.tripPath.isNotEmpty) {
-    mapController.moveCamera(trip.tripPath.first, zoom: 12); // Center on first point
+    if (tripsLayer == null) {
+      print("TripsLayer not found.");
+      return;
+    }
+
+    tripsLayer.clear();
+    print("Cleared previous trip data.");
+
+    for (var trip in tripProvider.trips) {
+      if (trip.tripPath.isNotEmpty) {
+        print("Adding trip: ${trip.tripId}, Points: ${trip.tripPath.length}");
+      } else {
+        print("Skipping trip ${trip.tripId} (empty path)");
+      }
+      tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
+    }
+
+    print("Active polylines: ${tripsLayer.getPolylines().length}");
+    print("Active markers: ${tripsLayer.getMarkers().length}");
+
+    setState(() {}); // Refresh UI
   }
 
-  setState(() {}); // Refresh UI
-}
+  Future<void> _loadTripById(String tripId) async {
+    print("Loading trip with ID: $tripId");
+
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
+
+    if (tripsLayer == null) {
+      print("TripsLayer not found.");
+      return;
+    }
+
+    // Fetch the specific trip
+    final trip = await tripProvider.fetchTripById(tripId);
+    if (trip == null) {
+      print("Trip not found.");
+      return;
+    }
+
+    tripsLayer.clear(); // Clear previous trips
+    tripsLayer.addTripPolyline(
+        trip.tripPath, trip.tripId); // Display only this trip
+
+    print("Trip displayed on map: ${trip.tripId}");
+
+    if (trip.tripPath.isNotEmpty) {
+      mapController.moveCamera(trip.tripPath.first,
+          zoom: 12); // Center on first point
+    }
+
+    setState(() {}); // Refresh UI
+  }
 
   /// Show trip filter options via bottom sheet.
   void _showTripFilters() {
@@ -299,7 +331,9 @@ Future<void> _loadTripById(String tripId) async {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("Filter Trips", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const Text("Filter Trips",
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -327,7 +361,8 @@ Future<void> _loadTripById(String tripId) async {
   }
 
   /// Build individual filter option button.
-  Widget _buildFilterOption(String option, void Function(void Function()) setStateSheet) {
+  Widget _buildFilterOption(
+      String option, void Function(void Function()) setStateSheet) {
     bool isSelected = _selectedTripFilter == option;
     return OutlinedButton(
       onPressed: () {
@@ -338,7 +373,8 @@ Future<void> _loadTripById(String tripId) async {
       style: OutlinedButton.styleFrom(
         backgroundColor: isSelected ? Colors.greenAccent : Colors.white,
       ),
-      child: Text(option, style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
+      child: Text(option,
+          style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
     );
   }
 
@@ -353,11 +389,12 @@ Future<void> _loadTripById(String tripId) async {
         automaticallyImplyLeading: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.group, color: Colors.white),
+            icon: const Icon(Icons.chat_rounded, color: Colors.white),
             onPressed: () {
-              if (ModalRoute.of(context)?.settings.name != '/find_friends') {
-                Navigator.of(context).pushNamed('/find_friends');
-              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ContactsScreen()),
+              );
             },
           ),
           IconButton(
@@ -370,7 +407,7 @@ Future<void> _loadTripById(String tripId) async {
         children: [
           Column(
             children: [
-                  MapSearchBar(
+              MapSearchBar(
                 searchController: _searchController,
                 onSearch: _searchPlaces,
                 hintText: 'Let us find places for you..',
@@ -407,7 +444,8 @@ Future<void> _loadTripById(String tripId) async {
               heroTag: 'fab_1',
               onPressed: _toggleTripRecording,
               backgroundColor: _isRecordingTrip ? Colors.red : Colors.green,
-              child: Icon(_isRecordingTrip ? Icons.stop : Icons.play_arrow, color: Colors.white),
+              child: Icon(_isRecordingTrip ? Icons.stop : Icons.play_arrow,
+                  color: Colors.white),
               tooltip: _isRecordingTrip ? 'Stop Trip' : 'Start Trip',
             ),
           ),
@@ -456,7 +494,8 @@ Future<void> _loadTripById(String tripId) async {
               category3: _selectedPlaceCategory3,
               onDragUpdate: (delta) {
                 setState(() {
-                  _containerHeight -= delta / MediaQuery.of(context).size.height;
+                  _containerHeight -=
+                      delta / MediaQuery.of(context).size.height;
                   _containerHeight = _containerHeight.clamp(0.1, 0.5);
                 });
               },
