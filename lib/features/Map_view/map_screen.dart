@@ -210,30 +210,33 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _updateActiveTripLayer() {
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    final mapController = Provider.of<MapController>(context, listen: false);
-    final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
+void _updateActiveTripLayer() {
+  final tripProvider = Provider.of<TripProvider>(context, listen: false);
+  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+  final mapController = Provider.of<MapController>(context, listen: false);
+  final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
 
-    // ✅ Ensure tripsLayer is not null before calling methods
-    if (tripsLayer is TripsLayer && tripProvider.currentTrip != null) {
-      final tripPath = tripProvider.currentTrip!.tripPath;
+  if (tripsLayer == null || tripProvider.currentTrip == null) return;
 
-      if (tripsLayer == null) {
-        print("TripsLayer not found.");
-        return;
-      }
-      print('trip active');
-      // ✅ Add teal-colored polyline
-      tripsLayer.addTripPolyline(tripPath, "active_trip");
+  final tripPath = tripProvider.currentTrip!.tripPath;
+  final currentLocation = locationProvider.currentLocation;
 
-      // ✅ Add animated recording effect
-      tripsLayer.addRecordingTripEffect(tripPath.last);
+  if (currentLocation == null) return;
 
-      // ✅ Move camera to follow the trip
-      mapController.moveCamera(tripPath.last, zoom: 14);
-    }
+  // Ensure the last recorded position is different from the current position
+  if (tripPath.isEmpty || tripPath.last != currentLocation) {
+    tripProvider.addLocation(currentLocation); // Add location to trip
+
+    // Update polyline dynamically
+    tripsLayer.updateTripPolyline(tripPath, "active_trip");
+
+    // Move the animated circle (current position)
+    tripsLayer.addRecordingTripEffect(currentLocation);
+
+    // Move the camera to follow user
+    mapController.moveCamera(currentLocation, zoom: 14);
   }
+}
 
   Future<void> _fetchAndDisplayTrips() async {
     print("Fetching trips...");

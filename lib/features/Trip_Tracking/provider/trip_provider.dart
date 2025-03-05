@@ -1,9 +1,14 @@
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:provider/provider.dart';
 import 'package:serendip/models/trip_model.dart';
 import 'package:serendip/core/utils/geojson_utils.dart';
 import 'package:uuid/uuid.dart';
+
+import '../../../core/utils/navigator_key.dart';
+import '../../Map_view/controller/map_controller.dart';
 
 class TripProvider with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -11,10 +16,27 @@ class TripProvider with ChangeNotifier {
   bool _isRecording = false;
   List<LatLng> _tripPath = [];
   List<TripModel> _trips = [];
+  
+  Set<Polyline> _polylines = {}; // Store polylines for active trips
+  Set<Marker> _markers = {}; // Store markers (e.g., red circle for active trip)
 
   TripModel? get currentTrip => _currentTrip;
   bool get isRecording => _isRecording;
   List<TripModel> get trips => _trips;
+  Set<Polyline> get polylines => _polylines;
+  Set<Marker> get markers => _markers;
+
+
+  /// **Add trip ID to a user's document in Firestore**
+Future<void> addTripToUser(String userId, String tripId) async {
+  final userRef = _firestore.collection('users').doc(userId);
+
+  await userRef.update({
+    'trips': FieldValue.arrayUnion([tripId]),
+    'tripCount': FieldValue.increment(1),
+  });
+}
+
 
   /// **Start a new trip**
 void startTrip(String tripName, String userId, String description, String privacy, List<String> collaborators, LatLng startLocation) {
@@ -23,7 +45,6 @@ void startTrip(String tripName, String userId, String description, String privac
   _tripPath.clear();
   _isRecording = true;
 
-  // Ensure the creator is also in the collaborators list
   if (!collaborators.contains(userId)) {
     collaborators.add(userId);
   }
@@ -41,10 +62,18 @@ void startTrip(String tripName, String userId, String description, String privac
     isActive: true,
   );
 
-  // ✅ Ensure start location is added
   print("📍 Adding first location: $startLocation");
   _tripPath.add(startLocation);
-  _currentTrip!.tripPath.add(startLocation); // ✅ Add it to the TripModel
+  _currentTrip!.tripPath.add(startLocation);
+
+  // 🔹 Update the map immediately after starting
+  final mapController = Provider.of<MapController>(
+    navigatorKey.currentState!.overlay!.context,
+    listen: false,
+  );
+  
+  mapController.addTripPolyline(_tripPath, "active_trip"); // ✅ Ensure polyline is added
+  mapController.addActiveTripCircle(startLocation); // ✅ Ensure red circle is added
 
   notifyListeners();
   print("🔄 notifyListeners() called after starting trip!");
@@ -56,6 +85,16 @@ void addLocation(LatLng location) {
   if (_isRecording) {
     print("📍 New location added: $location");
     _tripPath.add(location);
+    _currentTrip?.tripPath.add(location);
+
+    final mapController = Provider.of<MapController>(
+      navigatorKey.currentState!.overlay!.context,
+      listen: false,
+    );
+    
+    mapController.addTripPolyline(_tripPath, "active_trip"); // ✅ Update polyline
+    mapController.addActiveTripCircle(location); // ✅ Update red circle
+
     notifyListeners();
     print("🔄 notifyListeners() called after adding location!");
   } else {
@@ -67,24 +106,56 @@ void addLocation(LatLng location) {
 
   /// **Stop the trip and save it**
   Future<void> stopTrip(LatLng endLocation) async {
-    if (_currentTrip == null) return;
+  if (_currentTrip == null) return;
 
-    _isRecording = false;
-    _tripPath.add(endLocation);
-    _currentTrip!.tripPath = _tripPath;
-    _currentTrip!.isActive = false;
+  _isRecording = false;
+  _tripPath.add(endLocation);
+  _currentTrip!.tripPath = _tripPath;
+  _currentTrip!.isActive = false;
 
-    String tripId = await _saveTripToFirestore();
+  String tripId = await _saveTripToFirestore();
+
+  await addTripToUser(_currentTrip!.userId, tripId);
+  for (String collaboratorId in _currentTrip!.collaborators) {
+    await addTripToUser(collaboratorId, tripId);
+  }
+
+  // 🔹 Clear the active trip polyline
+  final mapController = Provider.of<MapController>(
+    navigatorKey.currentState!.overlay!.context,
+    listen: false,
+  );
+  mapController.clearLayer("trips_layer");
+
+  _currentTrip = null;
+  notifyListeners();
+}
+
+
+  /// **Update polylines and markers for UI updates**
+  void _updateMapElements() {
+    if (_tripPath.isEmpty) return;
     
-    // Save the trip ID in the user's document
-    await addTripToUser(_currentTrip!.userId, tripId);
+    // Create polyline for the active trip
+    _polylines.clear();
+    _polylines.add(
+      Polyline(
+        polylineId: PolylineId("active_trip"),
+        points: _tripPath,
+        color: Colors.blue,
+        width: 5,
+      ),
+    );
 
-    for (String collaboratorId in _currentTrip!.collaborators) {
-      await addTripToUser(collaboratorId, tripId);
-    }
-
-    _currentTrip = null;
-    notifyListeners();
+    // Update marker to show current location
+    _markers.clear();
+    _markers.add(
+      Marker(
+        markerId: MarkerId("current_location"),
+        position: _tripPath.last,
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+      ),
+    );
   }
 
   /// **Save the trip to Firestore**
@@ -98,16 +169,6 @@ void addLocation(LatLng location) {
     return _currentTrip!.tripId;
   }
 
-  /// **Add trip ID to a user's document in Firestore**
-  Future<void> addTripToUser(String userId, String tripId) async {
-    final userRef = _firestore.collection('users').doc(userId);
-
-    await userRef.update({
-      'trips': FieldValue.arrayUnion([tripId]),
-      'tripCount': FieldValue.increment(1),
-    });
-  }
-
   /// **Fetch trips based on filter criteria**
   Future<void> fetchTrips({required String userId, required String filter}) async {
     QuerySnapshot tripSnapshot;
@@ -117,19 +178,14 @@ void addLocation(LatLng location) {
           .collection('trips')
           .where('user_id', isEqualTo: userId)
           .get();
-    } 
-    
-    else if (filter == 'Friends\' Trips') {
+    } else if (filter == 'Friends\' Trips') {
       List<String> friends = [];
-
       final friendsSnapshot = await _firestore
           .collection('users')
           .doc(userId)
           .collection('friends')
           .get();
-
       friends = friendsSnapshot.docs.map((doc) => doc.id).toList();
-
       if (friends.isNotEmpty) {
         tripSnapshot = await _firestore
             .collection('trips')
@@ -139,9 +195,7 @@ void addLocation(LatLng location) {
       } else {
         return;
       }
-    } 
-    
-    else {
+    } else {
       tripSnapshot = await _firestore
           .collection('trips')
           .where('collaborators', arrayContains: userId)
@@ -155,7 +209,8 @@ void addLocation(LatLng location) {
     notifyListeners();
   }
 
-  Future<TripModel?> fetchTripById(String tripId) async {
+
+    Future<TripModel?> fetchTripById(String tripId) async {
     try {
       final tripDoc = await FirebaseFirestore.instance.collection('trips').doc(tripId).get();
       if (!tripDoc.exists) return null;
@@ -168,4 +223,11 @@ void addLocation(LatLng location) {
       return null;
     }
   }
+  /// **Updates active trip UI on the map**
+void updateActiveTripOnMap() {
+  if (_currentTrip != null && _isRecording) {
+    notifyListeners();
+  }
+}
+
 }

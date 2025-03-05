@@ -8,6 +8,7 @@ class MapController extends ChangeNotifier {
   final Map<String, MapLayer> _layers = {};
   final Set<String> _activeLayers = {};
   final TripsLayer _tripsLayer = TripsLayer();
+    Circle? _activeTripCircle; // 🔴 Circle for active trip
 
   MapController() {
     addLayer('trips_layer', _tripsLayer); // ✅ Register TripsLayer properly
@@ -87,13 +88,24 @@ class MapController extends ChangeNotifier {
   }
 
 
-  Set<Circle> get circles {
-  Set<Circle> allCircles = {};
-  for (var layerId in _activeLayers) {
-    allCircles.addAll(_layers[layerId]?.getCircles() ?? {});
+   void addActiveTripCircle(LatLng position) {
+    _activeTripCircle = Circle(
+      circleId: CircleId("active_trip"),
+      center: position,
+      radius: 10, // Small red circle
+      fillColor: Colors.red.withOpacity(0.5),
+      strokeColor: Colors.red,
+      strokeWidth: 2,
+    );
+    notifyListeners();
   }
-  return allCircles;
-}
+
+  @override
+  Set<Circle> get circles {
+    Set<Circle> allCircles = {};
+    if (_activeTripCircle != null) allCircles.add(_activeTripCircle!);
+    return allCircles;
+  }
 
 
 

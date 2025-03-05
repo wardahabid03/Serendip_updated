@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -50,6 +51,30 @@ class TripsLayer extends MapLayer {
     notifyListeners();
   }
 
+  Future<void> updateTripPolyline(List<LatLng> path, String tripId) async {
+  if (path.isEmpty) return;
+
+      final startIcon = await getCustomIcon("assets/images/pin2.png");
+
+  _tripPolylines[tripId] = Polyline(
+    polylineId: PolylineId(tripId),
+    points: path,
+    color: Colors.blue,
+    width: 6,
+  );
+
+   _tripMarkers["start_$tripId"] = Marker(
+      markerId: MarkerId("start_$tripId"),
+      position: path.first,
+      infoWindow: InfoWindow(title: "Trip Start"),
+      icon: startIcon,
+    );
+
+
+  notifyListeners();
+}
+
+
   void addRecordingTripEffect(LatLng position) {
     String circleId = "recording_trip_circle";
 
@@ -101,3 +126,5 @@ class TripsLayer extends MapLayer {
   @override
   void onTap(LatLng position) {}
 }
+
+

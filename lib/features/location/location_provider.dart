@@ -8,7 +8,6 @@ import '../../services/location_service.dart';
 import '../Trip_Tracking/provider/trip_provider.dart';
 import 'dart:math';
 
-
 class LocationProvider with ChangeNotifier {
   LatLng? _currentLocation;
   LatLng? _lastRecordedLocation;
@@ -53,6 +52,7 @@ class LocationProvider with ChangeNotifier {
       LatLng? newLocation = await _locationService.getUserLocation();
       if (newLocation != null && _shouldRecordLocation(newLocation)) {
         _updateTripLocation(newLocation);
+        _updateActiveTripDisplay(newLocation);
       }
     });
   }
@@ -74,17 +74,31 @@ class LocationProvider with ChangeNotifier {
 
   /// **Update the trip provider with new location**
   void _updateTripLocation(LatLng newLocation) {
-    _currentLocation = newLocation;
-    _lastRecordedLocation = newLocation;
-    notifyListeners();
+  _currentLocation = newLocation;
+  _lastRecordedLocation = newLocation;
+  notifyListeners();
 
+  final tripProvider = Provider.of<TripProvider>(
+    navigatorKey.currentState!.overlay!.context,
+    listen: false,
+  );
+
+  if (tripProvider.isRecording) {
+    tripProvider.addLocation(newLocation);
+    tripProvider.updateActiveTripOnMap();  // ✅ Ensure the UI updates
+  }
+}
+
+
+  /// **Ensure active trip is displayed properly on the map**
+  void _updateActiveTripDisplay(LatLng newLocation) {
     final tripProvider = Provider.of<TripProvider>(
       navigatorKey.currentState!.overlay!.context,
       listen: false,
     );
 
     if (tripProvider.isRecording) {
-      tripProvider.addLocation(newLocation);
+      tripProvider.updateActiveTripOnMap();
     }
   }
 

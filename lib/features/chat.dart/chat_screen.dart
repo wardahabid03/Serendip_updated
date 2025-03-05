@@ -21,7 +21,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final ImagePicker _picker = ImagePicker();
-  File? _selectedImage; // Stores selected image before sending
+  File? _selectedImage;
+  Map<String, dynamic>? _repliedMessage; // Stores the replied message details
 
   String get chatRoomId {
     final currentUserId = _auth.currentUser!.uid;
@@ -40,14 +41,17 @@ class _ChatScreenState extends State<ChatScreen> {
       'mediaUrl': mediaUrl,
       'mediaType': mediaType,
       'timestamp': FieldValue.serverTimestamp(),
+      'repliedMessage': _repliedMessage, // Store replied message details
     });
 
     _messageController.clear();
+    setState(() {
+      _repliedMessage = null; // Clear reply preview after sending
+    });
   }
 
   Future<void> pickAndPreviewImage() async {
     final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-
     if (pickedFile == null) return;
 
     setState(() {
@@ -62,12 +66,7 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Image.file(
-                _selectedImage!,
-                fit: BoxFit.contain,
-              ),
-            ),
+            Expanded(child: Image.file(_selectedImage!, fit: BoxFit.contain)),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -108,73 +107,55 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void openMediaViewer(String mediaUrl, String mediaType) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: Container(
-            width: double.infinity,
-            height: double.infinity,
-            color: Colors.black,
-            child: InteractiveViewer(
-              panEnabled: true,
-              boundaryMargin: EdgeInsets.all(0),
-              minScale: 1.0,
-              maxScale: 4.0,
-              child: Image.network(
-                mediaUrl,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.contain,
-              ),
+  Widget _buildReplyPreview() {
+    if (_repliedMessage == null) return SizedBox.shrink();
+
+    return Container(
+      padding: EdgeInsets.all(8),
+      margin: EdgeInsets.only(bottom: 5),
+      decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(8)),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _repliedMessage!['senderId'] == _auth.currentUser!.uid ? "You" : "Friend",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                _repliedMessage!['text'] != null
+                    ? Text(_repliedMessage!['text'], maxLines: 1, overflow: TextOverflow.ellipsis)
+                    : (_repliedMessage!['mediaUrl'] != null
+                        ? Text("[Media]", style: TextStyle(fontStyle: FontStyle.italic))
+                        : SizedBox.shrink()),
+              ],
             ),
           ),
-        ),
+          IconButton(
+            icon: Icon(Icons.close, size: 18),
+            onPressed: () => setState(() => _repliedMessage = null),
+          ),
+        ],
       ),
     );
   }
 
-  Future<void> deleteMessage(DocumentSnapshot message) async {
-    try {
-      if (message['mediaUrl'] != null) {
-        await FirebaseStorage.instance.refFromURL(message['mediaUrl']).delete();
-      }
-
-      await _firestore.collection('chats').doc(chatRoomId).collection('messages').doc(message.id).delete();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Message deleted"),
-          duration: Duration(seconds: 2),
-        ),
-      );
-    } catch (e) {
-      print("Error deleting message: $e");
-    }
-  }
-
-  void showDeleteConfirmation(DocumentSnapshot message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Delete Message"),
-        content: Text("Are you sure you want to delete this message?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Cancel"),
+  Widget _buildRepliedMessage(Map<String, dynamic> repliedMessage) {
+    return Container(
+      margin: EdgeInsets.only(bottom: 5),
+      padding: EdgeInsets.all(8),
+      decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            repliedMessage['senderId'] == _auth.currentUser!.uid ? "You" : "Friend",
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          TextButton(
-            onPressed: () {
-              deleteMessage(message);
-              Navigator.pop(context);
-            },
-            child: Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
+          repliedMessage['text'] != null
+              ? Text(repliedMessage['text'])
+              : (repliedMessage['mediaUrl'] != null ? Text("[Media]") : SizedBox.shrink()),
         ],
       ),
     );
@@ -211,36 +192,41 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemBuilder: (context, index) {
                     final message = messages[index];
                     final isMe = message['senderId'] == _auth.currentUser!.uid;
-
                     final messageData = message.data() as Map<String, dynamic>;
                     final text = messageData['text'];
                     final mediaUrl = messageData['mediaUrl'];
                     final mediaType = messageData['mediaType'];
+                    final repliedMessage = messageData['repliedMessage'];
 
                     return GestureDetector(
                       onLongPress: () {
-                        if (isMe) {
-                          showDeleteConfirmation(message);
-                        }
+                        setState(() {
+                          _repliedMessage = {
+                            'senderId': message['senderId'],
+                            'text': message['text'],
+                            'mediaUrl': message['mediaUrl'],
+                            'mediaType': message['mediaType'],
+                          };
+                        });
                       },
                       child: Align(
                         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-                        child: Container(
-                          margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
-                          padding: EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isMe ? tealColor : Colors.grey[300],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: mediaUrl != null
-                              ? GestureDetector(
-                                  onTap: () => openMediaViewer(mediaUrl, mediaType!),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(mediaUrl, width: 200, height: 200, fit: BoxFit.cover),
-                                  ),
-                                )
-                              : Text(text ?? '', style: TextStyle(color: isMe ? Colors.white : Colors.black)),
+                        child: Column(
+                          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                          children: [
+                            if (repliedMessage != null) _buildRepliedMessage(repliedMessage),
+                            Container(
+                              margin: EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                              padding: EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isMe ? tealColor : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: mediaUrl != null
+                                  ? Image.network(mediaUrl, width: 200, height: 200, fit: BoxFit.cover)
+                                  : Text(text ?? '', style: TextStyle(color: isMe ? Colors.white : Colors.black)),
+                            ),
+                          ],
                         ),
                       ),
                     );
@@ -248,8 +234,55 @@ class _ChatScreenState extends State<ChatScreen> {
                 );
               },
             ),
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            
           ),
-          Padding(
+          _buildReplyPreview(),
+   Padding(
             padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
