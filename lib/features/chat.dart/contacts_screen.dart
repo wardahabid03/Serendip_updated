@@ -16,7 +16,7 @@ class _ContactsScreenState extends State<ContactsScreen> {
   void initState() {
     super.initState();
     profileProvider = Provider.of<ProfileProvider>(context, listen: false);
-    
+
     if (profileProvider.friendsDetails.isEmpty) {
       _loadFriendsFuture = profileProvider.fetchFriendsDetails(profileProvider.currentUserId);
     } else {
@@ -34,13 +34,17 @@ class _ContactsScreenState extends State<ContactsScreen> {
           if (snapshot.connectionState == ConnectionState.waiting && profileProvider.friendsDetails.isEmpty) {
             return Center(child: CircularProgressIndicator());
           }
-          
+
           if (profileProvider.friendsDetails.isEmpty) {
             return Center(child: Text("No friends found"));
           }
 
-          return ListView.builder(
+          return ListView.separated(
             itemCount: profileProvider.friendsDetails.length,
+            separatorBuilder: (context, index) => Container(
+              height: 1,
+              color: Colors.teal, // Teal-colored separator
+            ),
             itemBuilder: (context, index) {
               final friend = profileProvider.friendsDetails[index];
 
