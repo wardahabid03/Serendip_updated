@@ -26,7 +26,8 @@ void main() async {
   } catch (e) {
     print('Failed to initialize Firebase: $e');
   }
-
+  final chatProvider = ChatProvider();
+  chatProvider.listenForUnreadMessages(); // Start listening early
 
   runApp(MyApp());
 }

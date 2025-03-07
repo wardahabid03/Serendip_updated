@@ -242,19 +242,22 @@ Future<int> _countFriends(String userId) async {
 
 
 
-
 Future<List<Map<String, dynamic>>> fetchFriendsDetails(String userId) async {
   List<Map<String, dynamic>> friendsDetails = [];
   final SharedPreferences prefs = await SharedPreferences.getInstance();
 
-  // Load cached friends immediately (if available) for instant UI update
+  // Load cached friends instantly
   String? cachedFriends = prefs.getString('friends_$userId');
   if (cachedFriends != null) {
-    List<dynamic> cachedList = jsonDecode(cachedFriends);
-    friendsDetails = List<Map<String, dynamic>>.from(cachedList);
-    _friendsDetails = friendsDetails;
-    notifyListeners();
-    print("Loaded cached friends instantly.");
+    try {
+      List<dynamic> cachedList = jsonDecode(cachedFriends);
+      friendsDetails = List<Map<String, dynamic>>.from(cachedList);
+      _friendsDetails = friendsDetails;
+      notifyListeners();
+      print("Loaded cached friends instantly.");
+    } catch (e) {
+      print("Error decoding cached friends: $e");
+    }
   }
 
   try {
@@ -274,20 +277,23 @@ Future<List<Map<String, dynamic>>> fetchFriendsDetails(String userId) async {
       final friendProfile = await _firestore.collection('users').doc(friendId).get();
       if (friendProfile.exists) {
         final friendInfo = friendProfile.data() as Map<String, dynamic>;
-        freshFriends.add({
+        final friendData = {
           'userId': friendId,
           'username': friendInfo['username'] ?? 'Unknown',
           'profileImage': friendInfo['profileImage'] ?? '',
-        });
+        };
+        freshFriends.add(friendData);
       }
     }
 
-    // Update state and cache with fresh data
+    // If fetched data is different from cached, update the cache
+    if (jsonEncode(freshFriends) != cachedFriends) {
+      await prefs.setString('friends_$userId', jsonEncode(freshFriends));
+      print("Updated cache with fresh friends data.");
+    }
+
     _friendsDetails = freshFriends;
     notifyListeners();
-    await prefs.setString('friends_$userId', jsonEncode(freshFriends));
-
-    print("Fetched fresh friends data and updated cache.");
 
     return freshFriends;
   } catch (e) {
@@ -296,6 +302,7 @@ Future<List<Map<String, dynamic>>> fetchFriendsDetails(String userId) async {
 
   return friendsDetails; // Return cached or fetched data
 }
+
 
 
 

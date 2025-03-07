@@ -18,6 +18,7 @@ import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/models/trip_model.dart';
 import '../../models/places.dart';
 import '../../services/api_service.dart';
+import '../chat.dart/chat_provider.dart';
 import '../chat.dart/contacts_screen.dart';
 import '../profile.dart/presentation/view_profile.dart';
 import '../recomendation_system/widgets/place_details_bottom_sheet.dart';
@@ -61,6 +62,7 @@ class _MapScreenState extends State<MapScreen> {
     super.initState();
     _initializeLayers();
     _getUserLocation();
+    Provider.of<ChatProvider>(context, listen: false).listenForUnreadMessages();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.trip != null) {
@@ -390,7 +392,13 @@ void _updateActiveTripLayer() {
         title: const Text("Serendip", style: TextStyle(color: Colors.white)),
         backgroundColor: tealColor,
         automaticallyImplyLeading: false,
-        actions: [
+       actions: [
+  Consumer<ChatProvider>(
+    builder: (context, chatProvider, child) {
+      int totalUnread = chatProvider.unreadCounts.values.fold(0, (a, b) => a + b);
+
+      return Stack(
+        children: [
           IconButton(
             icon: const Icon(Icons.chat_rounded, color: Colors.white),
             onPressed: () {
@@ -400,11 +408,29 @@ void _updateActiveTripLayer() {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          ),
+          if (totalUnread > 0) // Show badge only if there are unread messages
+            Positioned(
+              right: 6,
+              top: 6,
+              child: CircleAvatar(
+                radius: 10,
+                backgroundColor: Colors.red,
+                child: Text(
+                  totalUnread.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
         ],
+      );
+    },
+  ),
+  IconButton(
+    icon: const Icon(Icons.logout, color: Colors.white),
+    onPressed: _logout,
+  ),
+],
+
       ),
       body: Stack(
         children: [

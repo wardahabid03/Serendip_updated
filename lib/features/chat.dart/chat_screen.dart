@@ -1,16 +1,16 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:serendip/core/constant/colors.dart';
+import 'chat_provider.dart';
 
 class ChatScreen extends StatefulWidget {
   final String userId;
   final String username;
+  final String profileImage;
 
-  ChatScreen({required this.userId, required this.username});
+  ChatScreen({required this.userId, required this.username,required this.profileImage});
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -18,185 +18,54 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final ImagePicker _picker = ImagePicker();
-  File? _selectedImage;
+  final ValueNotifier<QueryDocumentSnapshot<Map<String, dynamic>>?> _replyingTo = ValueNotifier(null);
 
-  String get chatRoomId {
-    final currentUserId = _auth.currentUser!.uid;
-    return currentUserId.hashCode <= widget.userId.hashCode
-        ? '$currentUserId-${widget.userId}'
-        : '${widget.userId}-$currentUserId';
-  }
-
-  void sendMessage({String? mediaUrl, String? mediaType}) {
-    if (_messageController.text.trim().isEmpty && mediaUrl == null) return;
-
-    _firestore.collection('chats').doc(chatRoomId).collection('messages').add({
-      'senderId': _auth.currentUser!.uid,
-      'receiverId': widget.userId,
-      'text': mediaUrl == null ? _messageController.text : null,
-      'mediaUrl': mediaUrl,
-      'mediaType': mediaType,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-
-    _messageController.clear();
-  }
-
-  Future<void> pickAndPreviewImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile == null) return;
-
-    setState(() {
-      _selectedImage = File(pickedFile.path);
-    });
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.all(10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Expanded(
-              child: Image.file(
-                _selectedImage!,
-                fit: BoxFit.contain,
-              ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                IconButton(
-                  icon: Icon(Icons.cancel, color: Colors.red, size: 30),
-                  onPressed: () {
-                    setState(() => _selectedImage = null);
-                    Navigator.pop(context);
-                  },
-                ),
-                IconButton(
-                  icon: Icon(Icons.send, color: Colors.green, size: 30),
-                  onPressed: () {
-                    uploadAndSendImage();
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> uploadAndSendImage() async {
-    if (_selectedImage == null) return;
-
-    String fileName = 'chat_images/${DateTime.now().millisecondsSinceEpoch}.jpg';
-
-    try {
-      TaskSnapshot snapshot = await FirebaseStorage.instance.ref(fileName).putFile(_selectedImage!);
-      String downloadUrl = await snapshot.ref.getDownloadURL();
-      sendMessage(mediaUrl: downloadUrl, mediaType: 'image');
-      setState(() => _selectedImage = null);
-    } catch (e) {
-      print("Image upload failed: $e");
-    }
-  }
-
-  void openMediaViewer(String mediaUrl, List<QueryDocumentSnapshot> messages, int initialIndex) {
-    List<String> imageUrls = messages
-        .where((msg) => msg['mediaUrl'] != null && msg['mediaType'] == 'image')
-        .map((msg) => msg['mediaUrl'] as String)
-        .toList();
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.black,
-        insetPadding: EdgeInsets.zero,
-        child: PageView.builder(
-          itemCount: imageUrls.length,
-          controller: PageController(initialPage: initialIndex),
-          itemBuilder: (context, index) {
-            return GestureDetector(
-              onTap: () => Navigator.pop(context),
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: Colors.black,
-                child: InteractiveViewer(
-                  panEnabled: true,
-                  boundaryMargin: EdgeInsets.all(0),
-                  minScale: 1.0,
-                  maxScale: 4.0,
-                  child: Image.network(
-                    imageUrls[index],
-                    width: double.infinity,
-                    height: double.infinity,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  void deleteMessage(DocumentSnapshot message) async {
-    try {
-      if (message['mediaUrl'] != null) {
-        await FirebaseStorage.instance.refFromURL(message['mediaUrl']).delete();
-      }
-
-      await _firestore.collection('chats').doc(chatRoomId).collection('messages').doc(message.id).delete();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Message deleted"), duration: Duration(seconds: 2)),
-      );
-    } catch (e) {
-      print("Error deleting message: $e");
-    }
-  }
-
-  void showDeleteConfirmation(DocumentSnapshot message) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Delete Message"),
-        content: Text("Are you sure you want to delete this message?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () {
-              deleteMessage(message);
-              Navigator.pop(context);
-            },
-            child: Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _replyingTo.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final chatRoomId = chatProvider.getChatRoomId(widget.userId);
+
     return Scaffold(
-      appBar: AppBar(title: Text(widget.username)),
+    appBar: AppBar(
+      automaticallyImplyLeading : false,
+  title: Row(
+
+    children: [
+      // ✅ Profile Image
+      CircleAvatar(
+        radius: 18,
+        backgroundColor: Colors.grey[300], // Placeholder color
+        backgroundImage: widget.profileImage != '' && widget.profileImage!.isNotEmpty
+            ? NetworkImage(widget.profileImage)
+                                : const AssetImage('assets/images/profile.png') as ImageProvider,
+     
+      ),
+      SizedBox(width: 10),
+
+      // ✅ Username
+      Expanded(
+        child: Text(
+          widget.username,
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          overflow: TextOverflow.ellipsis, // Prevents text overflow
+        ),
+      ),
+    ],
+  ),
+),
+
       body: Column(
         children: [
           Expanded(
             child: StreamBuilder(
-              stream: _firestore
+              stream: FirebaseFirestore.instance
                   .collection('chats')
                   .doc(chatRoomId)
                   .collection('messages')
@@ -212,23 +81,26 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
 
                 final messages = snapshot.data!.docs;
-
                 return ListView.builder(
                   reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    final message = messages[index];
-                    final isMe = message['senderId'] == _auth.currentUser!.uid;
-
-                    final messageData = message.data() as Map<String, dynamic>;
-                    final text = messageData['text'];
+                    final messageDoc = messages[index] as QueryDocumentSnapshot<Map<String, dynamic>>;
+                    final messageData = messageDoc.data();
+                    final isMe = messageData['senderId'] == FirebaseAuth.instance.currentUser!.uid;
+                    final text = messageData['text'] ?? '';
                     final mediaUrl = messageData['mediaUrl'];
-                    final mediaType = messageData['mediaType'];
+                    final replyText = messageData.containsKey('replyText') ? messageData['replyText'] : null;
 
                     return GestureDetector(
                       onLongPress: () {
                         if (isMe) {
-                          showDeleteConfirmation(message);
+                          chatProvider.showDeleteConfirmation(context, chatRoomId, messageDoc);
+                        }
+                      },
+                      onHorizontalDragEnd: (details) {
+                        if (details.primaryVelocity != null && details.primaryVelocity!.abs() > 100) {
+                          _replyingTo.value = messageDoc; // ✅ Set message for reply (Only UI updates)
                         }
                       },
                       child: Align(
@@ -240,15 +112,36 @@ class _ChatScreenState extends State<ChatScreen> {
                             color: isMe ? tealColor : Colors.grey[300],
                             borderRadius: BorderRadius.circular(10),
                           ),
-                          child: mediaUrl != null
-                              ? GestureDetector(
-                                  onTap: () => openMediaViewer(mediaUrl, messages, index),
-                                  child: ClipRRect(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (replyText != null)
+                                Container(
+                                  padding: EdgeInsets.all(6),
+                                  margin: EdgeInsets.only(bottom: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[400],
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Image.network(mediaUrl, width: 200, height: 200, fit: BoxFit.cover),
                                   ),
-                                )
-                              : Text(text ?? '', style: TextStyle(color: isMe ? Colors.white : Colors.black)),
+                                  child: Text(
+                                    replyText ?? '📷 Photo',
+                                    style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.black),
+                                  ),
+                                ),
+                              mediaUrl != null
+                                  ? GestureDetector(
+                                      onTap: () => chatProvider.openMediaViewer(context, mediaUrl, messages, index),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Image.network(mediaUrl, width: 200, height: 200, fit: BoxFit.cover),
+                                      ),
+                                    )
+                                  : Text(
+                                      text,
+                                      style: TextStyle(color: isMe ? Colors.white : Colors.black),
+                                    ),
+                            ],
+                          ),
                         ),
                       ),
                     );
@@ -257,13 +150,110 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
+
+   ValueListenableBuilder<QueryDocumentSnapshot<Map<String, dynamic>>?>(
+  valueListenable: _replyingTo,
+  builder: (context, replyingTo, child) {
+    if (replyingTo == null) return SizedBox(); // Hide if no reply
+    
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+      padding: EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(10),
+        border: Border(
+          left: BorderSide(color: Colors.teal, width: 5), // Highlighted reply bar
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 5,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween, // Ensure proper spacing
+        children: [
+          // ✅ Vertically Centered Text
+          Expanded(
+            child: Container(
+              alignment: Alignment.centerLeft, // Center text vertically
+              child: Text(
+                replyingTo['text'] ?? '📷 Photo',
+                style: TextStyle(fontSize: 14, color: Colors.black87),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+
+          // ✅ Close Button
+          IconButton(
+            icon: Icon(Icons.close, color: Colors.red, size: 20),
+            onPressed: () => _replyingTo.value = null,
+          ),
+        ],
+      ),
+    );
+  },
+),
+
+
+          // 🔥 Message Input Field
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
-                IconButton(icon: Icon(Icons.attach_file), onPressed: pickAndPreviewImage),
-                Expanded(child: TextField(controller: _messageController, decoration: InputDecoration(border: OutlineInputBorder(), hintText: 'Type a message...'))),
-                IconButton(icon: Icon(Icons.send), onPressed: sendMessage),
+                Expanded(
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      hintText: 'Type a message...',
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: const BorderSide(color: tealColor, width: 2),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                      prefixIcon: IconButton(
+                        icon: Icon(Icons.attach_file, color: Colors.grey[600]),
+                        onPressed: () => chatProvider.pickAndPreviewImage(context, chatRoomId, widget.userId),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                    ),
+                  ),
+                ),
+                SizedBox(width: 8),
+                CircleAvatar(
+                  backgroundColor: Colors.teal,
+                  radius: 25,
+                  child: IconButton(
+                    icon: Icon(Icons.send, color: Colors.white),
+                    onPressed: () {
+                      if (_messageController.text.trim().isEmpty) return;
+
+                      chatProvider.sendMessage(
+                        chatRoomId,
+                        widget.userId,
+                        _messageController.text,
+                        replyText: _replyingTo.value != null ? _replyingTo.value!['text'] : null, // ✅ Send replyText if replying
+                      );
+
+                      _messageController.clear();
+                      _replyingTo.value = null; // ✅ Clear reply without full rebuild
+                    },
+                  ),
+                ),
               ],
             ),
           ),

@@ -76,6 +76,7 @@ case map:
           builder: (_) => ChatScreen(
             userId: args['userId'],
             username: args['username'],
+            profileImage: args['profileImage'],
           ),
         );
 
