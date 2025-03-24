@@ -1,14 +1,17 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:serendip/features/profile.dart/presentation/widgets/trip_card.dart';
 import '../../../core/routes.dart';
 import '../../../core/utils/bottom_nav_bar.dart';
 import '../../../core/utils/navigation_controller.dart';
 import '../../../models/friend_request_model.dart';
 import '../../../models/trip_model.dart';
 import '../../Social_Media/friend_request/friend_request_provider.dart';
+import '../../Trip_Tracking/provider/trip_provider.dart';
 import '../provider/profile_provider.dart';
 import '../../../core/constant/colors.dart';
+import 'widgets/photo_grid.dart';
 
 class ViewProfileScreen extends StatefulWidget {
   final String? userId; // If null, shows current user's profile
@@ -42,11 +45,16 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     _isCurrentUser =
         widget.userId == 'userId' || widget.userId == _currentUserId;
 
+        print('user id ${widget.userId}');
+
     // Load appropriate profile data
     _profileFuture = _isCurrentUser
         ? profileProvider.fetchUserProfile()
         : profileProvider.fetchUserProfile(userId: widget.userId!);
   }
+
+
+
 
   void _onNavBarItemSelected(int index) {
     setState(() {
@@ -55,15 +63,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     NavigationController.navigateToScreen(context, index);
   }
 
-  String _formatDate(String timestamp) {
-    try {
-      DateTime dateTime = DateTime.parse(timestamp);
-      return "${dateTime.day}-${dateTime.month}-${dateTime.year}"; // e.g., 26-02-2025
-    } catch (e) {
-      print("Error parsing date: $e");
-      return "Invalid Date";
-    }
-  }
+
 
   Future<void> _refreshProfile() async {
     setState(() {
@@ -87,7 +87,7 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             ),
             IconButton(
               icon: const Icon(Icons.edit),
-              onPressed: () => Navigator.pushNamed(context, '/edit-profile')
+              onPressed: () => Navigator.pushNamed(context, '/edit_profile')
                   .then((_) => _refreshProfile()),
             ),
           ],
@@ -305,34 +305,13 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       padding: const EdgeInsets.all(24.0),
       child: Column(
         children: [
-          Stack(
-            children: [
-              CircleAvatar(
-                radius: 60,
-                backgroundImage: profile['profileImage'] != null &&
-                        profile['profileImage'].isNotEmpty
-                    ? NetworkImage(profile['profileImage'])
-                    : const AssetImage('assets/images/profile.png')
-                        as ImageProvider,
-              ),
-              if (_isCurrentUser)
-                Positioned(
-                  bottom: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      color: tealSwatch,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.edit,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ),
-            ],
+          CircleAvatar(
+            radius: 60,
+            backgroundImage: profile['profileImage'] != null &&
+                    profile['profileImage'].isNotEmpty
+                ? NetworkImage(profile['profileImage'])
+                : const AssetImage('assets/images/profile.png')
+                    as ImageProvider,
           ),
           const SizedBox(height: 16),
           Text(
@@ -627,197 +606,134 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
     );
   }
 
-  Widget _buildTripsSection(Map<String, dynamic> profile) {
-    final trips = profile['trips'] as List<dynamic>? ?? [];
+Widget _buildTripsSection(Map<String, dynamic> profile) {
+  final trips = profile['trips'] as List<dynamic>? ?? [];
+// final String currentUserId = (profile['userId'] ?? '') as String;
+// print("Current user $currentUserId");
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Recent Trips',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (trips.isNotEmpty)
-              TextButton(
-                onPressed: () {
-                  // Navigate to all trips
-                },
-                child: const Text('See All'),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (trips.isEmpty)
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-                  SizedBox(height: 8),
-                  Text(
-                    'No trips yet',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          SizedBox(
-            height: 200,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: trips.length,
-              itemBuilder: (context, index) {
-                final trip = trips[index];
+void removeTrip(String tripId) {
+  setState(() {
+    trips.removeWhere((trip) => trip['tripId'] == tripId);
+  });
+}
 
-                return GestureDetector(
-                  onTap: () {
-                    print(
-                        'trip: ${trip['tripId']}'); // ✅ Corrected tripId access
-
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.map,
-                      arguments: {'trip': trip}, // ✅ Directly pass the Map
-                    );
-                  },
-                  child: Container(
-                    width: 200,
-                    margin: const EdgeInsets.only(right: 16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.7),
-                          ],
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            trip['trip_name'],
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _formatDate(trip[
-                                'created_at']), // ✅ Handle different date formats
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                );
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Recent Trips',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          if (trips.isNotEmpty)
+            TextButton(
+              onPressed: () {
+                // Navigate to all trips
               },
+              child: const Text('See All'),
             ),
+        ],
+      ),
+      const SizedBox(height: 8),
+      if (trips.isEmpty)
+        _buildEmptyTripsPlaceholder()
+        
+      else
+    
+        SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: trips.length,
+            itemBuilder: (context, index) {
+              return TripCard(trip: trips[index], isCurrentUser: _isCurrentUser,onTripDeleted: removeTrip);},
           ),
-      ],
-    );
-  }
+        ),
+    ],
+  );
+}
 
-  Widget _buildPhotosSection(Map<String, dynamic> profile) {
-    final photos = profile['photos'] as List<dynamic>? ?? [];
+/// Placeholder UI when no trips exist
+Widget _buildEmptyTripsPlaceholder() {
+  return Container(
+    height: 200,
+    decoration: BoxDecoration(
+      color: Colors.grey[100],
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.map_outlined, size: 48, color: Colors.grey),
+          SizedBox(height: 8),
+          Text(
+            'No trips yet',
+            style: TextStyle(color: Colors.grey),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+Widget _buildPhotosSection(Map<String, dynamic> profile) {
+  final tripImages = profile['tripImages'] as Map<String, List<dynamic>>? ?? {};
+  final tripNames = profile['tripNames'] as Map<String, String>? ?? {};
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+print('trip images---- $tripImages');
+
+
+  if (tripImages.isEmpty) {
+    return Container(
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'Photos',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (photos.isNotEmpty)
-              TextButton(
-                onPressed: () {
-                  // Navigate to all photos
-                },
-                child: const Text('See All'),
-              ),
+            Icon(Icons.photo_library_outlined, size: 48, color: Colors.grey),
+            SizedBox(height: 8),
+            Text('No photos yet', style: TextStyle(color: Colors.grey)),
           ],
         ),
-        const SizedBox(height: 8),
-        if (photos.isEmpty)
-          Container(
-            height: 200,
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.photo_library_outlined,
-                      size: 48, color: Colors.grey),
-                  SizedBox(height: 8),
-                  Text(
-                    'No photos yet',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: photos.length,
-            itemBuilder: (context, index) {
-              final photo = photos[index];
-              return Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  image: DecorationImage(
-                    image: NetworkImage(photo['url']),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-              );
-            },
-          ),
-      ],
+      ),
     );
   }
+
+  // Convert tripImages to match the expected format for PhotoGrid
+  final Map<String, List<Map<String, String>>> tripPhotos = tripImages.map((tripId, photos) {
+    List<Map<String, String>> imageMaps = photos.map((photo) {
+      return {
+        'id': photo['image_id']?.toString() ?? '', // Ensure 'id' is a string
+      'url': photo['image_url'] as String? ?? PhotoGrid.placeholderImage,
+      'tripName': tripNames[tripId] ?? 'Unnamed Trip', // Add trip name inside image data
+      };
+    }).toList();
+
+     return MapEntry(tripId, imageMaps); // Keep tripId as the key
+  });
+print("Trip Photos: $tripPhotos");
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 10),
+        child: Text(
+          'Photos',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+        ),
+      ),
+      
+      PhotoGrid(tripPhotos: tripPhotos), // Pass formatted tripPhotos to PhotoGrid
+    ],
+  );
+}
 }

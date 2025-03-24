@@ -1,24 +1,26 @@
-import 'dart:math';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:serendip/models/places.dart';
 import '../../../core/utils/image_markers.dart';
-import '../widgets/get_directions.dart';
 import 'map_layer.dart';
+import 'dart:math';
 import 'package:flutter/material.dart';
 
-
-class PlacesLayer implements MapLayer{
+class PlacesLayer extends MapLayer {
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
-  final Map<String, Polyline> _polylines = {}; // Store polylines with unique IDs
+  final Set<Polyline> _polylines = {};
   List<Place> _places = [];
   Place? _selectedPlace;
   LatLng? _userLocation;
+  final String _apiKey = "AIzaSyC4gULFHsrb14nNcNzQNwZa6tG0HNBIwmg";
 
   void updatePlaces(List<Place> places) {
     _places = places;
     _updateMarkers();
+    notifyListeners();
   }
 
   void setUserLocation(LatLng location) {
@@ -26,6 +28,7 @@ class PlacesLayer implements MapLayer{
     if (_selectedPlace != null) {
       _updateRoute();
     }
+    notifyListeners();
   }
 
   void selectPlace(Place place) {
@@ -34,9 +37,10 @@ class PlacesLayer implements MapLayer{
     if (_userLocation != null) {
       _updateRoute();
     }
+    notifyListeners();
   }
 
-  void _updateMarkers() async {
+void _updateMarkers() async {
     _markers.clear();
     
     if (_selectedPlace != null) {
@@ -56,34 +60,48 @@ class PlacesLayer implements MapLayer{
     }
   }
 
-  /// ✅ **Updated `_updateRoute()` using DirectionsService**
+
   Future<void> _updateRoute() async {
     if (_selectedPlace == null || _userLocation == null) return;
+    
+    final String url = "https://maps.googleapis.com/maps/api/directions/json"
+        "?origin=${_userLocation!.latitude},${_userLocation!.longitude}"
+        "&destination=${_selectedPlace!.latitude},${_selectedPlace!.longitude}"
+        "&key=$_apiKey";
 
     try {
-      // Fetch optimized route with simplification
-      List<LatLng> routePoints = await DirectionsService.getDirections(
-        _userLocation!,
-        LatLng(_selectedPlace!.latitude, _selectedPlace!.longitude),
-      );
-
-      _addRoutePolyline(routePoints);
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['routes'].isNotEmpty) {
+          final String encodedPolyline = data['routes'][0]['overview_polyline']['points'];
+          _addRoutePolyline(encodedPolyline);
+        }
+      } else {
+        print("Failed to fetch directions: ${response.body}");
+      }
     } catch (e) {
       print("Error fetching directions: $e");
     }
   }
 
-  /// ✅ **Simplified `_addRoutePolyline()`**
-  void _addRoutePolyline(List<LatLng> routePoints) {
-    _polylines.clear(); // Clear previous routes
+  void _addRoutePolyline(String encodedPolyline) {
+    PolylinePoints polylinePoints = PolylinePoints();
+    List<PointLatLng> decodedPoints = polylinePoints.decodePolyline(encodedPolyline);
+    List<LatLng> routePoints = decodedPoints
+        .map((point) => LatLng(point.latitude, point.longitude))
+        .toList();
 
-    _polylines["route"] = Polyline(
-      polylineId: PolylineId("route"),
-      points: routePoints,
-      color: Colors.blue, // Highlighted route
-      width: 6,
-      patterns: const [], // No pattern for simplicity
+    _polylines.clear();
+    _polylines.add(
+      Polyline(
+        polylineId: const PolylineId("route"),
+        points: routePoints,
+        color: Colors.blue,
+        width: 5,
+      ),
     );
+    notifyListeners();
   }
 
   @override
@@ -93,7 +111,7 @@ class PlacesLayer implements MapLayer{
   Set<Circle> getCircles() => _circles;
 
   @override
-  Set<Polyline> getPolylines() => _polylines.values.toSet();
+  Set<Polyline> getPolylines() => _polylines;
 
   @override
   void clear() {
@@ -102,14 +120,7 @@ class PlacesLayer implements MapLayer{
     _polylines.clear();
     _places.clear();
     _selectedPlace = null;
-  }
-
-  @override
-  void update() {
-    _updateMarkers();
-    if (_selectedPlace != null && _userLocation != null) {
-      _updateRoute();
-    }
+    notifyListeners();
   }
 
   @override
@@ -135,7 +146,7 @@ class PlacesLayer implements MapLayer{
   }
 
   double _calculateDistance(LatLng point1, LatLng point2) {
-    const double earthRadius = 6371; // Earth's radius in kilometers
+    const double earthRadius = 6371;
     
     final lat1 = point1.latitude * (pi / 180);
     final lat2 = point2.latitude * (pi / 180);
@@ -148,7 +159,4 @@ class PlacesLayer implements MapLayer{
     
     return earthRadius * c;
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

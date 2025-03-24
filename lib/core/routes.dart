@@ -10,7 +10,8 @@ import 'package:serendip/features/profile.dart/setting_screen.dart';
 import 'package:serendip/models/trip_model.dart';
 
 import '../features/Map_view/map_screen.dart';
-import '../features/chat.dart/chat_screen.dart';
+import '../features/chat/chat_screen.dart';
+import '../features/profile.dart/presentation/edit_profile.dart';
 import '../features/profile.dart/presentation/view_profile.dart';
 // import 'package:serendip/screens/map_screen.dart';
 // import 'package:your_app/screens/home/home_screen.dart';
@@ -27,6 +28,7 @@ class AppRoutes {
   static const String splash = '/splash';
   static const String walkthrough = '/walkthrough';
   static const String view_profile = '/view_profile';
+  static const String edit_profile = '/edit_profile';
   static const String settingsscreen = '/settingsscreen';
   static const String view_requests = '/view_requests';
   static const String chat = '/chat';
@@ -35,19 +37,17 @@ class AppRoutes {
     switch (settings.name) {
       // case home:
       //   return MaterialPageRoute(builder: (_) => HomeScreen());
-case map:
-  final args = settings.arguments as Map<String, dynamic>?;
+      case map:
+        final args = settings.arguments as Map<String, dynamic>?;
 
-  final TripModel? trip = args?['trip'] != null
-      ? TripModel.fromMap(args!['trip'], args['trip']['tripId']) // ✅ Extract tripId properly
-      : null;
+        final TripModel? trip = args?['trip'] != null
+            ? TripModel.fromMap(args!['trip'],
+                args['trip']['tripId']) // ✅ Extract tripId properly
+            : null;
 
-  return MaterialPageRoute(
-    builder: (_) => MapScreen(trip: trip),
-  );
-
-
-
+        return MaterialPageRoute(
+          builder: (_) => MapScreen(trip: trip),
+        );
 
       case auth:
         return MaterialPageRoute(builder: (_) => AuthScreen());
@@ -61,16 +61,17 @@ case map:
         return MaterialPageRoute(builder: (_) => SplashScreen());
       case walkthrough:
         return MaterialPageRoute(builder: (_) => WalkthroughScreen());
-         case view_requests:
+      case view_requests:
         return MaterialPageRoute(builder: (_) => FriendRequestPage());
-        
-        
+      case edit_profile:
+        return MaterialPageRoute(builder: (_) => EditProfileScreen());
+
       case view_profile:
         return MaterialPageRoute(
           builder: (_) =>
               ViewProfileScreen(userId: settings.arguments as String?),
         );
-         case chat: // ✅ Handle Chat Route
+      case chat: // ✅ Handle Chat Route
         final args = settings.arguments as Map<String, dynamic>;
         return MaterialPageRoute(
           builder: (_) => ChatScreen(

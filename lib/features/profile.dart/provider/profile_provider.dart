@@ -99,7 +99,6 @@ List<Map<String, dynamic>> get friendsDetails => _friendsDetails; // Getter
     }
   }
 
-
 Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
   try {
     final String uid = userId ?? _auth.currentUser?.uid ?? '';
@@ -128,8 +127,19 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
     // Fetch user's trips
     List<Map<String, dynamic>> trips = await fetchUserTrips(userId: uid);
 
-    // Extract trip IDs separately
-    List<String> tripIds = trips.map((trip) => trip['tripId'] as String).toList();
+    // Extract trip names and IDs
+    Map<String, String> tripNames = {}; // Store tripId -> tripName mapping
+    for (var trip in trips) {
+      tripNames[trip['tripId']] = trip['trip_name'] ?? 'Unnamed Trip';
+    }
+
+    // Fetch images from each trip and organize them
+    Map<String, List<Map<String, dynamic>>> tripImages = {};
+    for (var trip in trips) {
+      String tripId = trip['tripId'] as String;
+      List<Map<String, dynamic>> images = await fetchTripImages(tripId);
+      tripImages[tripId] = images;
+    }
 
     // Fetch friends count and details
     _isProfileComplete = data['isProfileComplete'] ?? false;
@@ -146,13 +156,39 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
       ...data,
       'friendsCount': friendsCount,
       'friendsDetails': friendsDetails,
-      'areFriends': areFriends,  // Add this to indicate friendship status
-      'tripIds': tripIds,  // ✅ Return trip IDs separately
-      'trips': trips,  // ✅ Include full trip details
+      'areFriends': areFriends, 
+      'tripIds': tripNames.keys.toList(), // ✅ Extracting Trip IDs
+      'trips': trips, // ✅ Including full trip details
+      'tripImages': tripImages, // ✅ Images grouped by trip
+      'tripNames': tripNames, // ✅ Mapping Trip IDs to Names
     };
   } catch (e) {
     print("Error fetching profile: $e");
     throw Exception('Failed to fetch profile: ${e.toString()}');
+  }
+}
+
+
+Future<List<Map<String, dynamic>>> fetchTripImages(String tripId) async {
+  try {
+    final snapshot = await _firestore
+        .collection('trips')
+        .doc(tripId)
+        .collection('images')
+        .get();
+
+    return snapshot.docs.map((doc) {
+      return {
+        'image_id': doc['image_id'],
+        'image_url': doc['image_url'],
+        'latitude': doc['latitude'],
+        'longitude': doc['longitude'],
+        'timestamp': doc['timestamp'],
+      };
+    }).toList();
+  } catch (e) {
+    print("Error fetching images for trip $tripId: $e");
+    return [];
   }
 }
 
@@ -349,6 +385,21 @@ Future<String?> autofillEmail() async {
     return null;
   }
 }
+
+Future<String> getUsernameById(String userId) async {
+  try {
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    if (userDoc.exists) {
+      return userDoc['username'] ?? 'Unknown';
+    } else {
+      return 'Unknown';
+    }
+  } catch (e) {
+    print("Error fetching username: $e");
+    return 'Unknown';
+  }
+}
+
 
 // Add this method to the existing ProfileProvider class
 

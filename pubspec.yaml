@@ -57,6 +57,7 @@ dependencies:
   image: 4.3.0
   firebase_storage: ^12.4.4
   video_player: ^2.9.3
+  cached_network_image: ^3.4.1
  
 
 dev_dependencies:
@@ -92,6 +93,7 @@ flutter:
     - assets/error.json
     - assets/images/pin2.png
     - assets/images/pin.png
+    - assets/images/default.jpg
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 

@@ -3,7 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:serendip/models/user_model.dart';
 import 'map_layer.dart';
 
-class FriendsLayer implements MapLayer {
+class FriendsLayer extends ChangeNotifier implements MapLayer { 
   final Set<Marker> _markers = {};
   final Set<Circle> _circles = {};
   final Set<Polyline> _polylines = {};
@@ -13,6 +13,7 @@ class FriendsLayer implements MapLayer {
   void updateFriends(List<UserModel> friends) {
     _friends = friends;
     _updateMarkers();
+    notifyListeners(); // Notify listeners of the change
   }
 
   void _updateMarkers() {
@@ -24,35 +25,30 @@ class FriendsLayer implements MapLayer {
           position: friend.location,
           infoWindow: InfoWindow(
             title: friend.username,
-            // snippet: 'Last seen: ${friend.lastSeen}',
           ),
           icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
         ),
       );
     }
+    notifyListeners(); // Notify listeners after updating markers
   }
 
   @override
-  Set<Marker> getMarkers() {
-    return _markers;
-  }
-
+  Set<Marker> getMarkers() => _markers;
+  
   @override
-  Set<Circle> getCircles() {
-    return _circles;
-  }
-
+  Set<Circle> getCircles() => _circles;
+  
   @override
-  Set<Polyline> getPolylines() {
-    return _polylines;
-  }
-
+  Set<Polyline> getPolylines() => _polylines;
+  
   @override
   void clear() {
     _markers.clear();
     _circles.clear();
     _polylines.clear();
     _friends.clear();
+    notifyListeners(); // Notify listeners when clearing
   }
 
   @override
@@ -64,7 +60,4 @@ class FriendsLayer implements MapLayer {
   void onTap(LatLng position) {
     // TODO: implement onTap
   }
-
-  @override
-  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -3,7 +3,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:serendip/features/Map_view/Layers/map_layer.dart';
 import 'package:serendip/features/Map_view/controller/map_controller.dart';
-import 'package:serendip/features/Map_view/layers/friends_layer.dart';
+import 'package:serendip/features/Map_view/Layers/friends_layer.dart';
 import 'package:serendip/features/Social_Media/find_friends/search_friends.dart';
 import 'package:serendip/models/user_model.dart';
 import 'package:serendip/services/location_service.dart';

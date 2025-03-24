@@ -1,34 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../layers/map_layer.dart';
-import '../layers/trips_layer.dart';
+import '../Layers/map_layer.dart';
+import '../Layers/trips_layer.dart';
 
 class MapController extends ChangeNotifier {
-  GoogleMapController? _mapController;
+  GoogleMapController? _controller; // ✅ Keep this consistent throughout
   final Map<String, MapLayer> _layers = {};
   final Set<String> _activeLayers = {};
-  final TripsLayer _tripsLayer = TripsLayer();
-    Circle? _activeTripCircle; // 🔴 Circle for active trip
+  TripsLayer _tripsLayer;
+  Circle? _activeTripCircle;
 
-  MapController() {
-    addLayer('trips_layer', _tripsLayer); // ✅ Register TripsLayer properly
+  // ✅ Constructor now requires TripsLayer to avoid unnecessary re-initialization
+  MapController(this._tripsLayer) {
+    _tripsLayer.addListener(_onLayerChanged);
+    addLayer('trips_layer', _tripsLayer);
     _activeLayers.add('trips_layer');
   }
 
-  void setController(GoogleMapController controller) {
-    _mapController = controller;
-    Future.microtask(() {
+  void updateTripsLayer(TripsLayer newTripsLayer) {
+    if (_tripsLayer != newTripsLayer) {
+      _tripsLayer.removeListener(_onLayerChanged);
+      _tripsLayer = newTripsLayer;
+      _tripsLayer.addListener(_onLayerChanged);
       notifyListeners();
-    });
-    print("Map controller initialized");
+    }
   }
 
-  void addLayer(String layerId, MapLayer layer) {
-    _layers[layerId] = layer;
-    Future.microtask(() {
-      notifyListeners();
-    });
+  // ✅ Ensures UI updates correctly when markers change
+  void _onLayerChanged() {
+    print("🔄 Layer changed, notifying listeners");
+    notifyListeners();
   }
+
+  void setController(GoogleMapController controller) {
+    _controller = controller;
+    notifyListeners();
+  }
+
+  GoogleMapController? get controller => _controller; // ✅ Getter for `_controller`
+
+  void addLayer(String layerId, MapLayer layer) {
+    if (!_layers.containsKey(layerId)) {
+      _layers[layerId] = layer;
+      layer.addListener(_onLayerChanged);
+    }
+    notifyListeners();
+  }
+
+  MapLayer? getLayer(String layerId) => _layers[layerId];
 
   void toggleLayer(String layerId, bool active) {
     if (active) {
@@ -36,20 +55,17 @@ class MapController extends ChangeNotifier {
     } else {
       _activeLayers.remove(layerId);
     }
-    Future.microtask(() {
-      notifyListeners();
-    });
+    notifyListeners();
   }
 
-  MapLayer? getLayer(String layerId) {
-    return _layers[layerId];
-  }
-
+  // ✅ Updated markers to ensure correct references
   Set<Marker> get markers {
     Set<Marker> allMarkers = {};
     for (var layerId in _activeLayers) {
-      allMarkers.addAll(_layers[layerId]?.getMarkers() ?? {});
+      final layerMarkers = _layers[layerId]?.getMarkers() ?? {};
+      allMarkers.addAll(layerMarkers);
     }
+    print("📍 Total markers: ${allMarkers.length}");
     return allMarkers;
   }
 
@@ -61,38 +77,43 @@ class MapController extends ChangeNotifier {
     return allPolylines;
   }
 
+  Set<Circle> get circles {
+    Set<Circle> allCircles = {};
+    if (_activeTripCircle != null) allCircles.add(_activeTripCircle!);
+    for (var layerId in _activeLayers) {
+      allCircles.addAll(_layers[layerId]?.getCircles() ?? {});
+    }
+    return allCircles;
+  }
+
   Future<bool> moveCamera(LatLng target, {double zoom = 15}) async {
-    if (_mapController == null) {
-      print("Map controller is null");
+    if (_controller == null) {
+      print("❌ Map controller is null");
       return false;
     }
 
     try {
-      print("Moving camera to: ${target.latitude}, ${target.longitude}");
-      await _mapController!.animateCamera(
+      print("🎯 Moving camera to: ${target.latitude}, ${target.longitude}");
+      await _controller!.animateCamera(
         CameraUpdate.newLatLngZoom(target, zoom),
       );
-      print("Camera moved successfully");
+      print("✅ Camera moved successfully");
       return true;
     } catch (e) {
-      print("Error moving camera: $e");
+      print("❌ Error moving camera: $e");
       return false;
     }
   }
 
   void addTripPolyline(List<LatLng> path, String tripId) {
     _tripsLayer.addTripPolyline(path, tripId);
-    Future.microtask(() {
-      notifyListeners();
-    });
   }
 
-
-   void addActiveTripCircle(LatLng position) {
+  void addActiveTripCircle(LatLng position) {
     _activeTripCircle = Circle(
-      circleId: CircleId("active_trip"),
+      circleId: const CircleId("active_trip"),
       center: position,
-      radius: 10, // Small red circle
+      radius: 10,
       fillColor: Colors.red.withOpacity(0.5),
       strokeColor: Colors.red,
       strokeWidth: 2,
@@ -100,35 +121,28 @@ class MapController extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  Set<Circle> get circles {
-    Set<Circle> allCircles = {};
-    if (_activeTripCircle != null) allCircles.add(_activeTripCircle!);
-    return allCircles;
-  }
-
-
-
   void clearAllTrips() {
     _tripsLayer.clear();
-    Future.microtask(() {
-      notifyListeners();
-    });
   }
 
   void clearLayer(String layerId) {
     _layers[layerId]?.clear();
-    Future.microtask(() {
-      notifyListeners();
-    });
   }
 
   void clearAllLayers() {
     for (var layer in _layers.values) {
       layer.clear();
     }
-    Future.microtask(() {
-      notifyListeners();
-    });
   }
+
+  @override
+  void dispose() {
+    for (var layer in _layers.values) {
+      layer.removeListener(_onLayerChanged);
+    }
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  TripsLayer get tripsLayer => _tripsLayer;
 }

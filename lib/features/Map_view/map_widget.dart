@@ -17,20 +17,25 @@ class SharedMapWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<MapController>(
       builder: (context, controller, child) {
+        final markers = controller.markers;
+        print("🗺 SharedMapWidget: Rebuilding with ${markers.length} markers");
+
         return GoogleMap(
           initialCameraPosition: CameraPosition(
             target: initialPosition,
             zoom: initialZoom,
           ),
-          markers: controller.markers,
+          markers: markers,
           polylines: controller.polylines,
-          circles: controller.circles, // ✅ Ensure circles are included
+          circles: controller.circles,
           onMapCreated: (GoogleMapController mapController) {
             controller.setController(mapController);
           },
+           tiltGesturesEnabled: true, // Ensure tilt gestures are enabled
           myLocationEnabled: true,
           myLocationButtonEnabled: true,
           zoomControlsEnabled: true,
+          mapType: MapType.normal,
         );
       },
     );

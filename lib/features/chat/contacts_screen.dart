@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:serendip/core/routes.dart';
-import 'package:serendip/features/chat.dart/chat_provider.dart';
+import 'package:serendip/features/chat/chat_provider.dart';
 import '../profile.dart/provider/profile_provider.dart';
 
 class ContactsScreen extends StatefulWidget {
