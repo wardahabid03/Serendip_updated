@@ -53,7 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
       Expanded(
         child: Text(
           widget.username,
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+          style: TextStyle(fontSize: 18),
           overflow: TextOverflow.ellipsis, // Prevents text overflow
         ),
       ),

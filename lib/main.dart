@@ -8,16 +8,22 @@ import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/features/profile.dart/provider/profile_provider.dart';
 import 'package:serendip/firebase_options.dart';
 import 'package:serendip/features/Auth/auth_provider.dart';
-import 'package:serendip/core/routes.dart'; // Import the routes file
+import 'package:serendip/core/routes.dart';
 import 'core/theme/theme.dart';
 import 'core/utils/navigator_key.dart';
 import 'features/Map_view/Layers/trips_layer.dart';
 import 'features/Map_view/controller/map_controller.dart';
 import 'features/Social_Media/friend_request/friend_request_provider.dart';
 import 'features/Trip_Tracking/provider/trip_provider.dart';
+import 'package:flutter/services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+   await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
 
   try {
     await Firebase.initializeApp(
@@ -28,31 +34,48 @@ void main() async {
   }
 
   final chatProvider = ChatProvider();
-  chatProvider.listenForUnreadMessages(); // Start listening early
+  chatProvider.listenForUnreadMessages();
 
-  runApp(MyApp());
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
+  const MyApp({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => AuthProvider()),
-        ChangeNotifierProvider(create: (_) => ProfileProvider()),
-        ChangeNotifierProvider(create: (_) => FriendRequestProvider()),
-        ChangeNotifierProvider(create: (context) => LocationProvider()),
-        ChangeNotifierProvider(create: (context) => TripProvider()),
-        ChangeNotifierProvider(create: (context) => ChatProvider()),
-
-        // ✅ Provide TripsLayer first
-        ChangeNotifierProvider(create: (context) => TripsLayer()), 
-
-        // ✅ Corrected ChangeNotifierProxyProvider setup
+        // Core providers
+        ChangeNotifierProvider<AuthProvider>(
+          create: (_) => AuthProvider(),
+        ),
+        ChangeNotifierProvider<ProfileProvider>(
+          create: (_) => ProfileProvider(),
+        ),
+        
+        // Feature providers
+        ChangeNotifierProvider<FriendRequestProvider>(
+          create: (_) => FriendRequestProvider(),
+        ),
+        ChangeNotifierProvider<LocationProvider>(
+          create: (_) => LocationProvider(),
+        ),
+        ChangeNotifierProvider<TripProvider>(
+          create: (_) => TripProvider(),
+        ),
+        ChangeNotifierProvider<ChatProvider>(
+          create: (_) => ChatProvider(),
+        ),
+        
+        // Map-related providers
+        ChangeNotifierProvider<TripsLayer>(
+          create: (_) => TripsLayer(),
+        ),
         ChangeNotifierProxyProvider<TripsLayer, MapController>(
-          create: (context) => MapController(context.read<TripsLayer>()), // Initialize properly
-          update: (context, tripsLayer, previous) =>
-              previous ?? MapController(tripsLayer), // Ensure updates
+          create: (context) => MapController(context.read<TripsLayer>()),
+          update: (context, tripsLayer, previous) => 
+              previous ?? MapController(tripsLayer),
         ),
       ],
       child: MaterialApp(

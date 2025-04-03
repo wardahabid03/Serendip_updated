@@ -189,8 +189,9 @@ class _AuthScreenState extends State<AuthScreen> {
                         color: tealColor,
                         child: Column(
                           children: [
-                          SizedBox(height: MediaQuery.of(context).size.height * 0.09),
-
+                            SizedBox(
+                                height:
+                                    MediaQuery.of(context).size.height * 0.09),
                             Text(
                               _isLogin ? 'Log In' : 'Sign Up',
                               style: const TextStyle(
@@ -320,8 +321,17 @@ class _AuthScreenState extends State<AuthScreen> {
                             ],
                             const SizedBox(height: 25),
                             ElevatedButton.icon(
-                              onPressed: () =>
-                                  authProvider.signInWithGoogle(context),
+                              onPressed: () async {
+                                setState(() {
+                                  _isLoading = true;
+                                });
+
+                                await authProvider.signInWithGoogle(context);
+
+                                setState(() {
+                                  _isLoading = false;
+                                });
+                              },
                               icon: SvgPicture.asset(
                                 'assets/images/google.svg',
                                 height: 24,

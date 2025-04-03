@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,10 +10,15 @@ import 'friend_request_service.dart';
 class FriendRequestProvider with ChangeNotifier {
   final FriendRequestService _friendRequestService = FriendRequestService();
   List<FriendRequestModel> _pendingRequests = [];
-    final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  StreamSubscription? _friendRequestsSubscription;
 
   List<FriendRequestModel> get pendingRequests => _pendingRequests;
+
+  FriendRequestProvider() {
+    _listenForUnseenRequests();
+  }
 
   // Send a friend request
   Future<void> sendFriendRequest(String fromUserId, String toUserId) async {
@@ -27,67 +34,66 @@ class FriendRequestProvider with ChangeNotifier {
   // Fetch pending friend requests
   Future<void> fetchPendingRequests(String userId) async {
     try {
+      String? currentUserId = _auth.currentUser?.uid;
+      if (currentUserId == null) {
+        print("User not logged in.");
+        return;
+      }
 
-
-         // Get the current user ID
-    String? userId = FirebaseAuth.instance.currentUser?.uid;
-
-    if (userId == null) {
-      print("User not logged in.");
-      return;
+      _pendingRequests = await _friendRequestService.fetchPendingRequests(currentUserId);
+      notifyListeners();
+    } catch (e) {
+      print("Error fetching pending requests: $e");
     }
+  }
 
-    // Fetch pending requests for the current user
-    _pendingRequests = await _friendRequestService.fetchPendingRequests(userId);
-    notifyListeners(); // Notify listeners when data changes
-  } catch (e) {
-    print("Error fetching pending requests: $e");print("Error fetching pending requests: $e");
-    }
+  // Listen for unseen friend requests
+  void _listenForUnseenRequests() {
+    String? currentUserId = _auth.currentUser?.uid;
+    if (currentUserId == null) return;
+
+_friendRequestsSubscription = _firestore
+    .collection('friend_requests')
+    .where('to_user', isEqualTo: currentUserId)
+    .where('status', isEqualTo: 'pending') // Only listen for new requests
+    .snapshots()
+    .listen((snapshot) {
+  _pendingRequests = snapshot.docs
+      .map((doc) => FriendRequestModel.fromFirestore(doc, null)) // ✅ Fix: Pass null
+      .toList();
+  notifyListeners();
+
+// Notify UI to update
+    }, onError: (error) {
+      print("Error listening for friend requests: $error");
+    });
   }
 
   // Accept a friend request
- Future<void> acceptFriendRequest(String senderId, String receiverId) async {
-  try {
-    await _friendRequestService.updateFriendRequestStatus(senderId, receiverId, 'accepted');
-    // Refresh the list after accepting
-    await fetchPendingRequests(receiverId);
-  } catch (e) {
-    print("Error accepting friend request: $e");
+  Future<void> acceptFriendRequest(String senderId, String receiverId) async {
+    try {
+      await _friendRequestService.updateFriendRequestStatus(senderId, receiverId, 'accepted');
+      await fetchPendingRequests(receiverId);
+    } catch (e) {
+      print("Error accepting friend request: $e");
+    }
   }
-}
-
 
   // Decline a friend request
   Future<void> declineFriendRequest(String senderId, String receiverId) async {
     try {
       await _friendRequestService.updateFriendRequestStatus(senderId, receiverId, 'declined');
-      // Refresh the list after declining
       await fetchPendingRequests(receiverId);
     } catch (e) {
       print("Error declining friend request: $e");
     }
   }
 
-
-  // **New: Unfriend a user**
+  // Unfriend a user
   Future<void> unfriendUser(String currentUserId, String friendUserId) async {
     try {
-      // Remove friend relationship for current user
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUserId)
-          .collection('friends')
-          .doc(friendUserId)
-          .delete();
-
-      // Remove friend relationship for the other user
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(friendUserId)
-          .collection('friends')
-          .doc(currentUserId)
-          .delete();
-
+      await _firestore.collection('users').doc(currentUserId).collection('friends').doc(friendUserId).delete();
+      await _firestore.collection('users').doc(friendUserId).collection('friends').doc(currentUserId).delete();
       notifyListeners();
     } catch (e) {
       print("Error unfriending user: $e");
@@ -95,7 +101,8 @@ class FriendRequestProvider with ChangeNotifier {
     }
   }
 
-Future<String> getFriendRequestStatus(String otherUserId) async {
+  // Get friend request status
+  Future<String> getFriendRequestStatus(String otherUserId) async {
     String? currentUserId = _auth.currentUser?.uid;
     if (currentUserId == null) return 'none';
 
@@ -136,5 +143,12 @@ Future<String> getFriendRequestStatus(String otherUserId) async {
       print("Error checking friend request status: $e");
       return 'none';
     }
+  }
+
+  // Dispose listener when provider is removed
+  @override
+  void dispose() {
+    _friendRequestsSubscription?.cancel();
+    super.dispose();
   }
 }

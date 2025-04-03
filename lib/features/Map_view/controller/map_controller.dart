@@ -4,17 +4,21 @@ import '../Layers/map_layer.dart';
 import '../Layers/trips_layer.dart';
 
 class MapController extends ChangeNotifier {
-  GoogleMapController? _controller; // ✅ Keep this consistent throughout
+  GoogleMapController? _controller;
   final Map<String, MapLayer> _layers = {};
   final Set<String> _activeLayers = {};
   TripsLayer _tripsLayer;
   Circle? _activeTripCircle;
 
-  // ✅ Constructor now requires TripsLayer to avoid unnecessary re-initialization
   MapController(this._tripsLayer) {
     _tripsLayer.addListener(_onLayerChanged);
     addLayer('trips_layer', _tripsLayer);
     _activeLayers.add('trips_layer');
+
+    // Listen to all layer updates
+    for (var layer in _layers.values) {
+      layer.addListener(_onLayerChanged);
+    }
   }
 
   void updateTripsLayer(TripsLayer newTripsLayer) {
@@ -26,10 +30,9 @@ class MapController extends ChangeNotifier {
     }
   }
 
-  // ✅ Ensures UI updates correctly when markers change
   void _onLayerChanged() {
     print("🔄 Layer changed, notifying listeners");
-    notifyListeners();
+    Future.microtask(() => notifyListeners()); // Ensure UI updates on next frame
   }
 
   void setController(GoogleMapController controller) {
@@ -37,7 +40,7 @@ class MapController extends ChangeNotifier {
     notifyListeners();
   }
 
-  GoogleMapController? get controller => _controller; // ✅ Getter for `_controller`
+  GoogleMapController? get controller => _controller;
 
   void addLayer(String layerId, MapLayer layer) {
     if (!_layers.containsKey(layerId)) {
@@ -58,11 +61,11 @@ class MapController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ✅ Updated markers to ensure correct references
   Set<Marker> get markers {
     Set<Marker> allMarkers = {};
     for (var layerId in _activeLayers) {
       final layerMarkers = _layers[layerId]?.getMarkers() ?? {};
+      print("📍 Layer $layerId has ${layerMarkers.length} markers");
       allMarkers.addAll(layerMarkers);
     }
     print("📍 Total markers: ${allMarkers.length}");
@@ -85,25 +88,34 @@ class MapController extends ChangeNotifier {
     }
     return allCircles;
   }
-
-  Future<bool> moveCamera(LatLng target, {double zoom = 15}) async {
-    if (_controller == null) {
-      print("❌ Map controller is null");
-      return false;
-    }
-
-    try {
-      print("🎯 Moving camera to: ${target.latitude}, ${target.longitude}");
-      await _controller!.animateCamera(
-        CameraUpdate.newLatLngZoom(target, zoom),
-      );
-      print("✅ Camera moved successfully");
-      return true;
-    } catch (e) {
-      print("❌ Error moving camera: $e");
-      return false;
-    }
+Future<bool> moveCamera(LatLng target, {double zoom = 15, double tilt = 0, double bearing = 0}) async {
+  if (_controller == null) {
+    print("❌ Map controller is null");
+    return false;
   }
+
+  try {
+    print("🎯 Smoothly moving camera to: ${target.latitude}, ${target.longitude} with tilt: $tilt and zoom: $zoom");
+
+    await _controller!.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: target,
+          zoom: zoom,    // Smooth zoom
+          tilt: tilt,    // 3D tilt effect
+          bearing: bearing, // Rotate camera smoothly
+        ),
+      ),
+    );
+
+    print("✅ Camera animation completed");
+    return true;
+  } catch (e) {
+    print("❌ Error moving camera: $e");
+    return false;
+  }
+}
+
 
   void addTripPolyline(List<LatLng> path, String tripId) {
     _tripsLayer.addTripPolyline(path, tripId);
@@ -127,12 +139,14 @@ class MapController extends ChangeNotifier {
 
   void clearLayer(String layerId) {
     _layers[layerId]?.clear();
+    notifyListeners();
   }
 
   void clearAllLayers() {
     for (var layer in _layers.values) {
       layer.clear();
     }
+    notifyListeners();
   }
 
   @override

@@ -227,7 +227,6 @@ class TripHelper {
 
   /// **Start a new trip**
   static Future<bool> startTrip(BuildContext context) async {
-
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     final userId = FirebaseAuth.instance.currentUser?.uid;
@@ -235,19 +234,36 @@ class TripHelper {
     if (userId == null) return false;
 
     LatLng? userLocation = locationProvider.currentLocation;
-    if (userLocation == null) return false;
+    if (userLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to get your location. Please try again.'))
+      );
+      return false;
+    }
 
     final tripDetails = await _showTripDetailsDialog(context);
     if (tripDetails == null) return false;
 
-    tripProvider.startTrip(tripDetails["name"], userId, tripDetails["description"], tripDetails["privacy"], List<String>.from(tripDetails["collaborators"]), userLocation);
-    print('trip started');
+    tripProvider.startTrip(
+      tripDetails["name"],
+      userId,
+      tripDetails["description"],
+      tripDetails["privacy"],
+      List<String>.from(tripDetails["collaborators"]),
+      userLocation
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Trip started! Your trip will continue recording even if you close the app.'),
+        duration: Duration(seconds: 3),
+      )
+    );
+
     return true;
   }
 
-
-
- /// **Stop the current trip and record the user's current location**
+  /// **Stop the current trip and record the user's current location**
   static Future<void> stopTrip(BuildContext context) async {
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
@@ -273,9 +289,4 @@ class TripHelper {
       const SnackBar(content: Text("Trip saved successfully!")),
     );
   }
-
-
 }
-
-
-

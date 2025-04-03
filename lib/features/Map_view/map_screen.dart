@@ -1,8 +1,6 @@
 import 'dart:io';
 import 'dart:math';
-
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
-
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
@@ -12,7 +10,6 @@ import 'package:serendip/features/Auth/auth_provider.dart';
 import 'package:serendip/core/routes.dart';
 import 'package:serendip/features/Map_view/Layers/map_layer.dart';
 import 'package:serendip/features/Map_view/controller/map_controller.dart';
-import 'package:serendip/features/Map_view/Layers/map_layer.dart';
 import 'package:serendip/features/Map_view/map_widget.dart';
 import 'package:serendip/features/Map_view/Layers/places_layer.dart';
 import 'package:serendip/features/Map_view/Layers/trips_layer.dart';
@@ -23,26 +20,25 @@ import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/models/trip_model.dart';
 import '../../models/places.dart';
 import '../../services/api_service.dart';
+import '../Social_Media/friend_request/friend_request_provider.dart';
+import '../Social_Media/friend_request/friend_request_screen.dart';
 import '../chat/chat_provider.dart';
 import '../chat/contacts_screen.dart';
-import '../profile.dart/presentation/view_profile.dart';
 import '../recomendation_system/widgets/place_details_bottom_sheet.dart';
 import '../recomendation_system/widgets/place_list.dart';
 import '../../core/utils/bottom_nav_bar.dart';
 import '../../core/utils/navigation_controller.dart';
-import 'package:serendip/features/Auth/auth_provider.dart';
 
 class MapScreen extends StatefulWidget {
-  final TripModel? trip; // Accepts a Trip model directly
-
+  final TripModel? trip;
   const MapScreen({Key? key, this.trip}) : super(key: key);
   @override
   _MapScreenState createState() => _MapScreenState();
 }
 
-class _MapScreenState extends State<MapScreen> {
+class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
-  LatLng _userLocation = LatLng(0, 0);
+  LatLng _userLocation = const LatLng(0, 0);
   List<Place> _places = [];
   bool _isPlaceSelected = false;
   bool _isRecordingTrip = false;
@@ -57,23 +53,68 @@ class _MapScreenState extends State<MapScreen> {
   static const String PLACES_LAYER = 'places_layer';
   static const String TRIPS_LAYER = 'trips_layer';
   int _selectedIndex = 0;
-
-  // Trip filter value
-  String _selectedTripFilter =
-      "My Trips"; // Options: "My Trips", "Friends' Trips", "Collaborated Trips"
+  String _selectedTripFilter = "My Trips";
 
   @override
   void initState() {
     super.initState();
-    _initializeLayers();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeLayers();
+      _checkActiveTrip();
+    });
     _getUserLocation();
     Provider.of<ChatProvider>(context, listen: false).listenForUnreadMessages();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.trip != null) {
+    if (widget.trip != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         _displayTrip(widget.trip!);
-      }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkActiveTrip();
+    }
+  }
+
+  Future<void> _checkActiveTrip() async {
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    setState(() {
+      _isRecordingTrip = tripProvider.isRecording;
     });
+
+    if (_isRecordingTrip) {
+      // Update UI to show active trip
+      final mapController = Provider.of<MapController>(context, listen: false);
+      final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+      
+      if (tripProvider.currentTrip != null && locationProvider.currentLocation != null) {
+        mapController.addTripPolyline(
+          tripProvider.currentTrip!.tripPath,
+          "active_trip"
+        );
+        mapController.addActiveTripCircle(locationProvider.currentLocation!);
+      }
+
+      // Show active trip notification
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Trip recording is active'),
+            duration: Duration(seconds: 3),
+          )
+        );
+      }
+    }
   }
 
   void _onNavBarItemSelected(int index) {
@@ -85,20 +126,17 @@ class _MapScreenState extends State<MapScreen> {
 
   void _initializeLayers() {
     final mapController = Provider.of<MapController>(context, listen: false);
-    // Add PlacesLayer for place markers
-    mapController.addLayer(PLACES_LAYER, PlacesLayer() as MapLayer);
+    mapController.addLayer(PLACES_LAYER, PlacesLayer());
     mapController.toggleLayer(PLACES_LAYER, true);
-    // Add TripsLayer for trip routes/markers
-    mapController.addLayer(TRIPS_LAYER, TripsLayer() as MapLayer);
+    mapController.addLayer(TRIPS_LAYER, TripsLayer());
     mapController.toggleLayer(TRIPS_LAYER, true);
   }
 
   Future<void> _getUserLocation() async {
-    final locationProvider =
-        Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     final mapController = Provider.of<MapController>(context, listen: false);
     setState(() {
-      _userLocation = locationProvider.currentLocation ?? LatLng(0, 0);
+      _userLocation = locationProvider.currentLocation ?? const LatLng(0, 0);
     });
     mapController.moveCamera(_userLocation);
   }
@@ -144,16 +182,17 @@ class _MapScreenState extends State<MapScreen> {
       placesLayer.selectPlace(place);
       placesLayer.setUserLocation(_userLocation);
     }
+
     await Future.delayed(const Duration(milliseconds: 300));
     final success = await mapController.moveCamera(
       LatLng(place.latitude, place.longitude),
-      zoom: 8,
+      zoom: 15,
     );
+
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-              'Could not move map to selected location. Please try again.'),
+          content: Text('Could not move map to selected location. Please try again.'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -161,29 +200,18 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _displayTrip(TripModel trip) async {
-    print("Displaying trip: ${trip.tripId}");
-
     final mapController = Provider.of<MapController>(context, listen: false);
-    final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
+    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
 
-    if (tripsLayer == null) {
-      print("TripsLayer not found.");
-      return;
-    }
+    if (tripsLayer == null) return;
 
     tripsLayer.clear();
     tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
 
-    // Fetch images from Firestore for this trip
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
     final images = await tripProvider.fetchTripImages(trip.tripId);
 
     for (var image in images) {
-      print('Trip Image $image');
-      print("images ${image['image_url']}");
-      print("longitude ${image['longitude']}");
-      print("latitude ${image['latitude']}");
-
       LatLng location = LatLng(image['latitude'], image['longitude']);
       tripsLayer.addImageMarker(context, location, image['image_url']);
     }
@@ -192,7 +220,7 @@ class _MapScreenState extends State<MapScreen> {
       mapController.moveCamera(trip.tripPath.first, zoom: 12);
     }
 
-    setState(() {}); // Refresh UI
+    setState(() {});
   }
 
   void _clearMap() {
@@ -204,170 +232,145 @@ class _MapScreenState extends State<MapScreen> {
     });
   }
 
-  void _logout() async {
-    await Provider.of<AuthProvider>(context, listen: false).logout();
-    Navigator.of(context).pushReplacementNamed(AppRoutes.auth);
-  }
-
-  void _toggleTripRecording() async {
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    final mapController = Provider.of<MapController>(context, listen: false);
-    final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
-
-    if (tripsLayer == null) return;
-
-    if (_isRecordingTrip) {
-      await TripHelper.stopTrip(context);
-      setState(() => _isRecordingTrip = false);
-      tripsLayer.clear();
-      tripProvider.removeListener(_updateActiveTripLayer);
-    } else {
-      bool tripStarted = await TripHelper.startTrip(context);
-      if (tripStarted) {
-        setState(() => _isRecordingTrip = true);
-        tripProvider.addListener(_updateActiveTripLayer);
-        _updateActiveTripLayer();
-      }
-    }
-  }
-
-  Future<void> _captureAndUploadImage(BuildContext context) async {
-    try {
-      final ImagePicker picker = ImagePicker();
-
-      // 1️⃣ Open Camera and Capture Image 📸
-      final XFile? pickedFile =
-          await picker.pickImage(source: ImageSource.camera);
-      if (pickedFile == null) return; // User canceled
-
-      File imageFile = File(pickedFile.path);
-
-      // 2️⃣ Get Current Location 📍
-      print(_userLocation);
-      LatLng currentLocation = _userLocation;
-
-      // 3️⃣ Upload Image using TripProvider 🚀
-      final tripProvider = Provider.of<TripProvider>(context, listen: false);
-      await tripProvider.captureImage(imageFile, currentLocation, context);
-
-      print("✅ Image captured and uploaded successfully!");
-
-      // Show Success Message
-      ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Image uploaded successfully!")));
-    } catch (e) {
-      print("❌ Error capturing image: $e");
-
-      // Show Error Message
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Failed to upload image")));
-    }
-  }
-
- void _updateActiveTripLayer() {
-  final tripProvider = Provider.of<TripProvider>(context, listen: false);
-  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+void _toggleTripRecording() async {
   final mapController = Provider.of<MapController>(context, listen: false);
-  final tripsLayer = mapController.getLayer('trips_layer') as TripsLayer?;
+  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
 
-  if (tripsLayer == null || tripProvider.currentTrip == null) return;
+  if (_isRecordingTrip) {
+    await TripHelper.stopTrip(context);
+    setState(() => _isRecordingTrip = false);
 
-  final tripPath = tripProvider.currentTrip!.tripPath;
-  final currentLocation = locationProvider.currentLocation;
-
-  if (currentLocation == null) return;
-
-  // ✅ Use a more precise check instead of direct LatLng comparison
-  if (tripPath.isEmpty || _hasSignificantMovement(tripPath.last, currentLocation)) {
-    tripProvider.addLocation(currentLocation); // Add location to trip
-
-    // ✅ Update polyline dynamically
-    tripsLayer.updateTripPolyline(tripPath, "active_trip", mapController.controller!);
-
-    // ✅ Move the animated circle (current position)
-    tripsLayer.addRecordingTripEffect(currentLocation, mapController.controller!);
-
-    // ✅ Move the camera to follow the user with a 3D tilt effect
-    mapController.controller?.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: currentLocation,
-          zoom: 18,
-          tilt: 60, // ✅ Adds a 3D effect (tilts the camera)
-          bearing: 30, // ✅ Slight rotation for a better effect
-        ),
-      ),
+    // Smoothly reset camera when trip stops
+    mapController.moveCamera(
+      locationProvider.currentLocation ?? _userLocation,
+      zoom: 14,
+      tilt: 0,
+      bearing: 0,
     );
+  } else {
+    bool tripStarted = await TripHelper.startTrip(context);
 
-    // ✅ Show a snackbar with a title for user feedback
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("📍 Moving to Your Location"),
-          duration: Duration(seconds: 2),
-        ),
+    if (tripStarted) {
+      setState(() => _isRecordingTrip = true);
+
+      // Smoothly move camera to user’s location with immersive effect
+      mapController.moveCamera(
+        locationProvider.currentLocation ?? _userLocation,
+        zoom: 18,
+        tilt: 60,    // 3D effect for trip view
+        bearing: 30, // Slight angle for a dynamic view
       );
     }
   }
 }
 
-// ✅ Helper function to check if movement is significant (e.g., > 5 meters)
-bool _hasSignificantMovement(LatLng lastLocation, LatLng newLocation) {
-  const double thresholdDistance = 5.0; // Adjust as needed
-  double distance = _calculateDistance(lastLocation, newLocation);
-  return distance > thresholdDistance;
-}
-
-// ✅ Haversine formula to calculate distance between two LatLng points
-double _calculateDistance(LatLng point1, LatLng point2) {
-  const double earthRadius = 6371000; // Meters
-  double lat1 = point1.latitude * (3.141592653589793 / 180);
-  double lon1 = point1.longitude * (3.141592653589793 / 180);
-  double lat2 = point2.latitude * (3.141592653589793 / 180);
-  double lon2 = point2.longitude * (3.141592653589793 / 180);
-  
-  double dLat = lat2 - lat1;
-  double dLon = lon2 - lon1;
-
-  double a = (sin(dLat / 2) * sin(dLat / 2)) +
-      cos(lat1) * cos(lat2) * (sin(dLon / 2) * sin(dLon / 2));
-
-  double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-  return earthRadius * c; // Distance in meters
-}
 
 
-  Future<void> _fetchAndDisplayTrips() async {
-    print("Fetching trips...");
-
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-
-    if (userId == null) {
-      print("No user logged in. Cannot fetch trips.");
+  Future<void> _captureAndUploadImage(BuildContext context) async {
+    if (!_isRecordingTrip) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please start a trip before capturing images'))
+      );
       return;
     }
 
-    print(
-        "Fetching trips for user ID: $userId with filter: $_selectedTripFilter");
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera);
+      
+      if (pickedFile == null) return;
+
+      File imageFile = File(pickedFile.path);
+      final tripProvider = Provider.of<TripProvider>(context, listen: false);
+      
+      if (tripProvider.isUploading) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please wait for the previous upload to complete'))
+        );
+        return;
+      }
+
+      await tripProvider.captureImage(imageFile, _userLocation, context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error capturing image: ${e.toString()}'))
+        );
+      }
+    }
+  }
+
+// void _updateActiveTripLayer() {
+//   final tripProvider = Provider.of<TripProvider>(context, listen: false);
+//   final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+//   final mapController = Provider.of<MapController>(context, listen: false);
+//   final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
+
+//   if (tripsLayer == null || tripProvider.currentTrip == null) return;
+
+//   final tripPath = tripProvider.currentTrip!.tripPath;
+//   final currentLocation = locationProvider.currentLocation;
+
+//   if (currentLocation == null) return;
+
+//   if (tripPath.isEmpty || _hasSignificantMovement(tripPath.last, currentLocation)) {
+//     tripProvider.addLocation(currentLocation);
+//     tripsLayer.updateTripPolyline(tripPath, "active_trip", mapController.controller!);
+//     tripsLayer.addRecordingTripEffect(currentLocation, mapController.controller!);
+
+//     // Move and tilt camera when trip is active
+//     mapController.controller?.animateCamera(
+//       CameraUpdate.newCameraPosition(
+//         CameraPosition(
+//           target: currentLocation,
+//           zoom: 18,  // Zoom in
+//           tilt: 60,  // 3D tilt effect
+//           bearing: 30, // Adjust bearing for better visualization
+//         ),
+//       ),
+//     );
+//   }
+// }
+
+
+  // bool _hasSignificantMovement(LatLng lastLocation, LatLng newLocation) {
+  //   const double thresholdDistance = 5.0;
+  //   double distance = _calculateDistance(lastLocation, newLocation);
+  //   return distance > thresholdDistance;
+  // }
+
+  // double _calculateDistance(LatLng point1, LatLng point2) {
+  //   const double earthRadius = 6371000;
+  //   double lat1 = point1.latitude * (pi / 180);
+  //   double lon1 = point1.longitude * (pi / 180);
+  //   double lat2 = point2.latitude * (pi / 180);
+  //   double lon2 = point2.longitude * (pi / 180);
+
+  //   double dLat = lat2 - lat1;
+  //   double dLon = lon2 - lon1;
+
+  //   double a = sin(dLat / 2) * sin(dLat / 2) +
+  //       cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
+  //   double c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  //   return earthRadius * c;
+  // }
+
+  Future<void> _fetchAndDisplayTrips() async {
+    final tripProvider = Provider.of<TripProvider>(context, listen: false);
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+
+    if (userId == null) return;
 
     await tripProvider.fetchTrips(userId: userId, filter: _selectedTripFilter);
-
-    print("Trips fetched: ${tripProvider.trips.length}");
-
     _updateTripsLayer();
   }
 
-  /// Update the TripsLayer with fetched trips.
   void _updateTripsLayer() async {
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
     final mapController = Provider.of<MapController>(context, listen: false);
     final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
 
-    if (tripsLayer == null) {
-      print("TripsLayer not found.");
-      return;
-    }
+    if (tripsLayer == null) return;
 
     tripsLayer.clear();
 
@@ -376,98 +379,58 @@ double _calculateDistance(LatLng point1, LatLng point2) {
         tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
       }
 
-      // Fetch and add image markers for each trip
       final images = await tripProvider.fetchTripImages(trip.tripId);
       for (var image in images) {
-        print('Trip Image $image');
-        print("images $image['image_url']");
-        print("longitude $image['longitude']");
-        print("latitude $image['latitude']");
-
         LatLng location = LatLng(image['latitude'], image['longitude']);
         tripsLayer.addImageMarker(context, location, image['image_url']);
       }
     }
 
-    setState(() {}); // Refresh UI
+    setState(() {});
   }
 
-  Future<void> _loadTripById(String tripId) async {
-    print("Loading trip with ID: $tripId");
-
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    final mapController = Provider.of<MapController>(context, listen: false);
-    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
-
-    if (tripsLayer == null) {
-      print("TripsLayer not found.");
-      return;
-    }
-
-    // Fetch the specific trip
-    final trip = await tripProvider.fetchTripById(tripId);
-    if (trip == null) {
-      print("Trip not found.");
-      return;
-    }
-
-    tripsLayer.clear(); // Clear previous trips
-    tripsLayer.addTripPolyline(
-        trip.tripPath, trip.tripId); // Display only this trip
-
-    print("Trip displayed on map: ${trip.tripId}");
-
-    if (trip.tripPath.isNotEmpty) {
-      mapController.moveCamera(trip.tripPath.first,
-          zoom: 12); // Center on first point
-    }
-
-    setState(() {}); // Refresh UI
-  }
-
-  /// Show trip filter options via bottom sheet.
   void _showTripFilters() {
     showModalBottomSheet(
       context: context,
       builder: (context) {
-        return StatefulBuilder(builder: (context, setStateSheet) {
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text("Filter Trips",
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildFilterOption("My Trips", setStateSheet),
-                    _buildFilterOption("Friends' Trips", setStateSheet),
-                    _buildFilterOption("Collaborated Trips", setStateSheet),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ElevatedButton(
-                  onPressed: () async {
-                    Navigator.of(context).pop();
-                    // Fetch and update trips based on the selected filter
-                    await _fetchAndDisplayTrips();
-                  },
-                  child: const Text("Apply Filter"),
-                ),
-              ],
-            ),
-          );
-        });
+        return StatefulBuilder(
+          builder: (context, setStateSheet) {
+            return Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    "Filter Trips",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildFilterOption("My Trips", setStateSheet),
+                      _buildFilterOption("Friends' Trips", setStateSheet),
+                      _buildFilterOption("Collaborated Trips", setStateSheet),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.of(context).pop();
+                      await _fetchAndDisplayTrips();
+                    },
+                    child: const Text("Apply Filter"),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
   }
 
-  /// Build individual filter option button.
-  Widget _buildFilterOption(
-      String option, void Function(void Function()) setStateSheet) {
+  Widget _buildFilterOption(String option, void Function(void Function()) setStateSheet) {
     bool isSelected = _selectedTripFilter == option;
     return OutlinedButton(
       onPressed: () {
@@ -478,8 +441,10 @@ double _calculateDistance(LatLng point1, LatLng point2) {
       style: OutlinedButton.styleFrom(
         backgroundColor: isSelected ? Colors.greenAccent : Colors.white,
       ),
-      child: Text(option,
-          style: TextStyle(color: isSelected ? Colors.white : Colors.black)),
+      child: Text(
+        option,
+        style: TextStyle(color: isSelected ? Colors.white : Colors.black)
+      ),
     );
   }
 
@@ -493,25 +458,60 @@ double _calculateDistance(LatLng point1, LatLng point2) {
         backgroundColor: tealColor,
         automaticallyImplyLeading: false,
         actions: [
-          Consumer<ChatProvider>(
-            builder: (context, chatProvider, child) {
-              int totalUnread =
-                  chatProvider.unreadCounts.values.fold(0, (a, b) => a + b);
-
+          Consumer<FriendRequestProvider>(
+            builder: (context, friendRequestProvider, child) {
+              int unreadRequests = friendRequestProvider.pendingRequests.length;
               return Stack(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.chat_rounded, color: Colors.white),
+                    icon: const Icon(Icons.notifications, color: Colors.white),
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(
-                            builder: (context) => ContactsScreen()),
+                        MaterialPageRoute(builder: (context) => FriendRequestPage()),
                       );
                     },
                   ),
-                  if (totalUnread >
-                      0) // Show badge only if there are unread messages
+                  if (unreadRequests > 0)
+                    Positioned(
+                      right: 6,
+                      top: 6,
+                      child: CircleAvatar(
+                        radius: 10,
+                        backgroundColor: Colors.red,
+                        child: Text(
+                          unreadRequests.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          Consumer<ChatProvider>(
+            builder: (context, chatProvider, child) {
+              int totalUnread = chatProvider.unreadCounts.values.fold(0, (a, b) => a + b);
+              return Stack(
+                children: [
+                  IconButton(
+                    icon: Image.asset(
+                      'assets/images/chat_icon.png',
+                      width: 24,
+                      height: 24,
+                    ),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => ContactsScreen()),
+                      );
+                    },
+                  ),
+                  if (totalUnread > 0)
                     Positioned(
                       right: 6,
                       top: 6,
@@ -521,9 +521,10 @@ double _calculateDistance(LatLng point1, LatLng point2) {
                         child: Text(
                           totalUnread.toString(),
                           style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold),
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold
+                          ),
                         ),
                       ),
                     ),
@@ -531,10 +532,7 @@ double _calculateDistance(LatLng point1, LatLng point2) {
               );
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          ),
+          const SizedBox(width: 10),
         ],
       ),
       body: Stack(
@@ -570,22 +568,40 @@ double _calculateDistance(LatLng point1, LatLng point2) {
               ),
             ],
           ),
-
+          if (_isRecordingTrip)
+            Positioned(
+              top: 100,
+              left: 20,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.fiber_manual_record, color: Colors.white, size: 12),
+                    SizedBox(width: 8),
+                    Text(
+                      'Recording Trip',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Positioned(
             bottom: 210,
             right: 10,
             child: FloatingActionButton(
               heroTag: 'fab_4',
-              onPressed: () {
-                _captureAndUploadImage(context); // ✅ Correct way to call it
-              },
+              onPressed: () => _captureAndUploadImage(context),
               backgroundColor: tealColor,
               child: const Icon(Icons.camera_alt, color: Colors.white),
               tooltip: 'Capture Image',
             ),
           ),
-
-          // Floating button for starting/stopping trips.
           Positioned(
             bottom: 90,
             right: 10,
@@ -593,12 +609,13 @@ double _calculateDistance(LatLng point1, LatLng point2) {
               heroTag: 'fab_1',
               onPressed: _toggleTripRecording,
               backgroundColor: _isRecordingTrip ? Colors.red : Colors.green,
-              child: Icon(_isRecordingTrip ? Icons.stop : Icons.play_arrow,
-                  color: Colors.white),
+              child: Icon(
+                _isRecordingTrip ? Icons.stop : Icons.play_arrow,
+                color: Colors.white
+              ),
               tooltip: _isRecordingTrip ? 'Stop Trip' : 'Start Trip',
             ),
           ),
-          // Floating button for clearing map.
           Positioned(
             top: 150,
             right: 10,
@@ -610,7 +627,6 @@ double _calculateDistance(LatLng point1, LatLng point2) {
               tooltip: 'Clear map',
             ),
           ),
-          // Floating button for trip filter options.
           Positioned(
             bottom: 150,
             right: 10,
@@ -622,7 +638,6 @@ double _calculateDistance(LatLng point1, LatLng point2) {
               tooltip: 'Filter Trips',
             ),
           ),
-          // Bottom navigation bar.
           Positioned(
             bottom: 0,
             left: 0,
@@ -643,8 +658,7 @@ double _calculateDistance(LatLng point1, LatLng point2) {
               category3: _selectedPlaceCategory3,
               onDragUpdate: (delta) {
                 setState(() {
-                  _containerHeight -=
-                      delta / MediaQuery.of(context).size.height;
+                  _containerHeight -= delta / MediaQuery.of(context).size.height;
                   _containerHeight = _containerHeight.clamp(0.1, 0.5);
                 });
               },
