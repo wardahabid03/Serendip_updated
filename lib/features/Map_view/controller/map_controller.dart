@@ -1,24 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
 import '../Layers/map_layer.dart';
 import '../Layers/trips_layer.dart';
+import '../Layers/review_layer.dart';
 
 class MapController extends ChangeNotifier {
   GoogleMapController? _controller;
   final Map<String, MapLayer> _layers = {};
   final Set<String> _activeLayers = {};
   TripsLayer _tripsLayer;
+  final ReviewLayer _reviewLayer; // ✅ Add ReviewLayer reference
   Circle? _activeTripCircle;
 
-  MapController(this._tripsLayer) {
+  MapController(this._tripsLayer, this._reviewLayer) {
     _tripsLayer.addListener(_onLayerChanged);
+    _reviewLayer.addListener(_onLayerChanged); // ✅ Listen for review updates
     addLayer('trips_layer', _tripsLayer);
-    _activeLayers.add('trips_layer');
+    addLayer('reviews_layer', _reviewLayer); // ✅ Register ReviewLayer
+    _activeLayers.add('trips_layer'); // Enable trips by default
 
-    // Listen to all layer updates
-    for (var layer in _layers.values) {
-      layer.addListener(_onLayerChanged);
-    }
+    // Load review visibility setting from SharedPreferences
+    _loadReviewVisibility();
+  }
+
+  // Fetch the review visibility setting from SharedPreferences
+  Future<void> _loadReviewVisibility() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool reviewVisibility = prefs.getBool('reviewVisibility') ?? true; // Default to true if not set
+    toggleReviewLayer(reviewVisibility);
   }
 
   void updateTripsLayer(TripsLayer newTripsLayer) {
@@ -48,6 +58,11 @@ class MapController extends ChangeNotifier {
       layer.addListener(_onLayerChanged);
     }
     notifyListeners();
+  }
+
+  // In MapController
+  void toggleReviewLayer(bool active) {
+    toggleLayer('reviews_layer', active); // This will toggle review layer based on 'active' state
   }
 
   MapLayer? getLayer(String layerId) => _layers[layerId];
@@ -88,39 +103,42 @@ class MapController extends ChangeNotifier {
     }
     return allCircles;
   }
-Future<bool> moveCamera(LatLng target, {double zoom = 15, double tilt = 0, double bearing = 0}) async {
-  if (_controller == null) {
-    print("❌ Map controller is null");
-    return false;
-  }
 
-  try {
-    print("🎯 Smoothly moving camera to: ${target.latitude}, ${target.longitude} with tilt: $tilt and zoom: $zoom");
+  // Smooth camera movement with tilt and rotation
+  Future<bool> moveCamera(LatLng target, {double zoom = 15, double tilt = 0, double bearing = 0}) async {
+    if (_controller == null) {
+      print("❌ Map controller is null");
+      return false;
+    }
 
-    await _controller!.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: target,
-          zoom: zoom,    // Smooth zoom
-          tilt: tilt,    // 3D tilt effect
-          bearing: bearing, // Rotate camera smoothly
+    try {
+      print("🎯 Smoothly moving camera to: ${target.latitude}, ${target.longitude} with tilt: $tilt and zoom: $zoom");
+
+      await _controller!.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: target,
+            zoom: zoom,
+            tilt: tilt,
+            bearing: bearing,
+          ),
         ),
-      ),
-    );
+      );
 
-    print("✅ Camera animation completed");
-    return true;
-  } catch (e) {
-    print("❌ Error moving camera: $e");
-    return false;
+      print("✅ Camera animation completed");
+      return true;
+    } catch (e) {
+      print("❌ Error moving camera: $e");
+      return false;
+    }
   }
-}
 
-
+  // Add Trip Polyline
   void addTripPolyline(List<LatLng> path, String tripId) {
     _tripsLayer.addTripPolyline(path, tripId);
   }
 
+  // Add Active Trip Circle
   void addActiveTripCircle(LatLng position) {
     _activeTripCircle = Circle(
       circleId: const CircleId("active_trip"),
@@ -133,20 +151,29 @@ Future<bool> moveCamera(LatLng target, {double zoom = 15, double tilt = 0, doubl
     notifyListeners();
   }
 
+  // Clear all trips
   void clearAllTrips() {
     _tripsLayer.clear();
   }
 
+  // Clear specific layer
   void clearLayer(String layerId) {
     _layers[layerId]?.clear();
     notifyListeners();
   }
 
+  // Clear all layers
   void clearAllLayers() {
     for (var layer in _layers.values) {
       layer.clear();
     }
     notifyListeners();
+  }
+
+  // Save review visibility setting to SharedPreferences
+  Future<void> saveReviewVisibility(bool value) async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('reviewVisibility', value);
   }
 
   @override
@@ -159,4 +186,5 @@ Future<bool> moveCamera(LatLng target, {double zoom = 15, double tilt = 0, doubl
   }
 
   TripsLayer get tripsLayer => _tripsLayer;
+  ReviewLayer get reviewLayer => _reviewLayer;
 }

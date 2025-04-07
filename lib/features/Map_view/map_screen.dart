@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:math';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -20,6 +21,7 @@ import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/models/trip_model.dart';
 import '../../models/places.dart';
 import '../../services/api_service.dart';
+import '../Reviews/review_provider.dart';
 import '../Social_Media/friend_request/friend_request_provider.dart';
 import '../Social_Media/friend_request/friend_request_screen.dart';
 import '../chat/chat_provider.dart';
@@ -52,6 +54,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   bool _isLoading = false;
   static const String PLACES_LAYER = 'places_layer';
   static const String TRIPS_LAYER = 'trips_layer';
+  static const String REVIEWS_LAYER = 'reviews_layer';
   int _selectedIndex = 0;
   String _selectedTripFilter = "My Trips";
 
@@ -130,6 +133,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     mapController.toggleLayer(PLACES_LAYER, true);
     mapController.addLayer(TRIPS_LAYER, TripsLayer());
     mapController.toggleLayer(TRIPS_LAYER, true);
+    mapController.toggleLayer(REVIEWS_LAYER, true);
   }
 
   Future<void> _getUserLocation() async {
@@ -300,60 +304,6 @@ void _toggleTripRecording() async {
     }
   }
 
-// void _updateActiveTripLayer() {
-//   final tripProvider = Provider.of<TripProvider>(context, listen: false);
-//   final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-//   final mapController = Provider.of<MapController>(context, listen: false);
-//   final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
-
-//   if (tripsLayer == null || tripProvider.currentTrip == null) return;
-
-//   final tripPath = tripProvider.currentTrip!.tripPath;
-//   final currentLocation = locationProvider.currentLocation;
-
-//   if (currentLocation == null) return;
-
-//   if (tripPath.isEmpty || _hasSignificantMovement(tripPath.last, currentLocation)) {
-//     tripProvider.addLocation(currentLocation);
-//     tripsLayer.updateTripPolyline(tripPath, "active_trip", mapController.controller!);
-//     tripsLayer.addRecordingTripEffect(currentLocation, mapController.controller!);
-
-//     // Move and tilt camera when trip is active
-//     mapController.controller?.animateCamera(
-//       CameraUpdate.newCameraPosition(
-//         CameraPosition(
-//           target: currentLocation,
-//           zoom: 18,  // Zoom in
-//           tilt: 60,  // 3D tilt effect
-//           bearing: 30, // Adjust bearing for better visualization
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-
-  // bool _hasSignificantMovement(LatLng lastLocation, LatLng newLocation) {
-  //   const double thresholdDistance = 5.0;
-  //   double distance = _calculateDistance(lastLocation, newLocation);
-  //   return distance > thresholdDistance;
-  // }
-
-  // double _calculateDistance(LatLng point1, LatLng point2) {
-  //   const double earthRadius = 6371000;
-  //   double lat1 = point1.latitude * (pi / 180);
-  //   double lon1 = point1.longitude * (pi / 180);
-  //   double lat2 = point2.latitude * (pi / 180);
-  //   double lon2 = point2.longitude * (pi / 180);
-
-  //   double dLat = lat2 - lat1;
-  //   double dLon = lon2 - lon1;
-
-  //   double a = sin(dLat / 2) * sin(dLat / 2) +
-  //       cos(lat1) * cos(lat2) * sin(dLon / 2) * sin(dLon / 2);
-  //   double c = 2 * atan2(sqrt(a), sqrt(1 - a));
-  //   return earthRadius * c;
-  // }
 
   Future<void> _fetchAndDisplayTrips() async {
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
@@ -448,8 +398,53 @@ void _toggleTripRecording() async {
     );
   }
 
+ void _handleLongPress(LatLng position, BuildContext context) async {
+  // Reverse geocode the LatLng to get the place name
+  List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
+  String placeName = placemarks.isNotEmpty ? placemarks.first.name ?? "Unknown Place" : "Unknown Place";
+
+  _showAddReviewDialog(context, position, placeName);
+}
+
+void _showAddReviewDialog(BuildContext context, LatLng position, String placeName) {
+  final TextEditingController reviewController = TextEditingController();
+  final reviewProvider = Provider.of<ReviewProvider>(context, listen: false);
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text("Add Review"),
+      content: TextField(
+        controller: reviewController,
+        maxLines: 3,
+        decoration: InputDecoration(hintText: "Write your review here..."),
+      ),
+      actions: [
+        TextButton(
+          child: Text("Cancel"),
+          onPressed: () => Navigator.pop(context),
+        ),
+        TextButton(
+          child: Text("Submit"),
+          onPressed: () async {
+            if (reviewController.text.isNotEmpty) {
+              String reviewId = '${position.latitude},${position.longitude}'; // Use LatLng as review ID
+              await reviewProvider.addReview(reviewId, placeName, reviewController.text,context);
+            }
+            Navigator.pop(context);
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+
+  
+
   @override
   Widget build(BuildContext context) {
+   final reviewProvider = Provider.of<ReviewProvider>(context);
     return Scaffold(
       backgroundColor: eggShellColor,
       resizeToAvoidBottomInset: false,
@@ -562,6 +557,7 @@ void _toggleTripRecording() async {
                 ),
               Expanded(
                 child: SharedMapWidget(
+                  onLongPress: (LatLng position) => _handleLongPress(position, context),
                   initialPosition: _userLocation,
                   initialZoom: 12,
                 ),

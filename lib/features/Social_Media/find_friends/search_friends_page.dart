@@ -23,6 +23,7 @@ class _FindFriendsPageState extends State<FindFriendsPage> {
   TextEditingController searchController = TextEditingController();
   UserRepository userRepository = UserRepository();
   static const String FRIENDS_LAYER = 'friends_layer';
+  static const String REVIEWS_LAYER = 'reviews_layer';
   bool isSearching = false;
   bool hasSearched = false;
 
@@ -81,6 +82,7 @@ class _FindFriendsPageState extends State<FindFriendsPage> {
     final mapController = Provider.of<MapController>(context, listen: false);
     mapController.addLayer(FRIENDS_LAYER, FriendsLayer());
     mapController.toggleLayer(FRIENDS_LAYER, true);
+    mapController.toggleLayer(REVIEWS_LAYER, false);
   }
 
   Future<void> _getUserLocation() async {

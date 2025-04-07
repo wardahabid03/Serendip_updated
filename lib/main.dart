@@ -3,6 +3,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:serendip/features/Reviews/review_provider.dart';
 import 'package:serendip/features/chat/chat_provider.dart';
 import 'package:serendip/features/location/location_provider.dart';
 import 'package:serendip/features/profile.dart/provider/profile_provider.dart';
@@ -11,6 +12,7 @@ import 'package:serendip/features/Auth/auth_provider.dart';
 import 'package:serendip/core/routes.dart';
 import 'core/theme/theme.dart';
 import 'core/utils/navigator_key.dart';
+import 'features/Map_view/Layers/review_layer.dart';
 import 'features/Map_view/Layers/trips_layer.dart';
 import 'features/Map_view/controller/map_controller.dart';
 import 'features/Social_Media/friend_request/friend_request_provider.dart';
@@ -20,7 +22,7 @@ import 'package:flutter/services.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-   await SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
@@ -53,7 +55,17 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<ProfileProvider>(
           create: (_) => ProfileProvider(),
         ),
-        
+        // Initialize the ReviewProvider before passing to ReviewLayer
+        ChangeNotifierProvider<ReviewProvider>(
+          create: (_) => ReviewProvider(), // Initialize ReviewProvider here
+        ),
+        // Provide ReviewLayer with ReviewProvider dependency
+        ChangeNotifierProvider<ReviewLayer>(
+          create: (context) => ReviewLayer(
+            reviewProvider: context.read<ReviewProvider>(), // Pass the initialized ReviewProvider
+            context: context,
+          ),
+        ),
         // Feature providers
         ChangeNotifierProvider<FriendRequestProvider>(
           create: (_) => FriendRequestProvider(),
@@ -67,15 +79,18 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider<ChatProvider>(
           create: (_) => ChatProvider(),
         ),
-        
         // Map-related providers
         ChangeNotifierProvider<TripsLayer>(
           create: (_) => TripsLayer(),
         ),
-        ChangeNotifierProxyProvider<TripsLayer, MapController>(
-          create: (context) => MapController(context.read<TripsLayer>()),
-          update: (context, tripsLayer, previous) => 
-              previous ?? MapController(tripsLayer),
+        // MapController now depends on both TripsLayer and ReviewLayer
+        ChangeNotifierProxyProvider2<TripsLayer, ReviewLayer, MapController>(
+          create: (context) => MapController(
+            context.read<TripsLayer>(),  // Pass TripsLayer
+            context.read<ReviewLayer>(), // Pass ReviewLayer
+          ),
+          update: (context, tripsLayer, reviewLayer, previous) =>
+              previous ?? MapController(tripsLayer, reviewLayer), // Update with both layers
         ),
       ],
       child: MaterialApp(

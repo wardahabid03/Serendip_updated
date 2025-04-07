@@ -6,11 +6,13 @@ import 'package:serendip/features/Map_view/controller/map_controller.dart';
 class SharedMapWidget extends StatelessWidget {
   final LatLng initialPosition;
   final double initialZoom;
+  final void Function(LatLng)? onLongPress; // Add this callback
 
   const SharedMapWidget({
     Key? key,
     required this.initialPosition,
     this.initialZoom = 12,
+    this.onLongPress, // Accept the callback
   }) : super(key: key);
 
   @override
@@ -25,13 +27,14 @@ class SharedMapWidget extends StatelessWidget {
             target: initialPosition,
             zoom: initialZoom,
           ),
-          markers: markers,
+          markers: markers, // This includes all markers from all layers, including reviews
           polylines: controller.polylines,
           circles: controller.circles,
           onMapCreated: (GoogleMapController mapController) {
             controller.setController(mapController);
           },
-           tiltGesturesEnabled: true, // Ensure tilt gestures are enabled
+          onLongPress: onLongPress, // Pass the callback to GoogleMap
+          tiltGesturesEnabled: true,
           myLocationEnabled: true,
           myLocationButtonEnabled: true,
           zoomControlsEnabled: true,

@@ -81,9 +81,13 @@ Future<List<UserModel>> findNearbyUsers(LatLng currentUserLocation, double radiu
           try {
             DocumentSnapshot userSnapshot =
                 await _firestore.collection('users').doc(userId).get();
+if (userSnapshot.exists) {
+  Map<String, dynamic> userData = userSnapshot.data() as Map<String, dynamic>;
 
-            if (userSnapshot.exists) {
-              Map<String, dynamic> userData = userSnapshot.data() as Map<String, dynamic>;
+  if (!(userData['locationEnabled'] ?? false)) {
+    print("🚫 Skipping user $userId (location not enabled)");
+    continue;
+  }
               
               print("📄 Retrieved Firestore data for user $userId");
 

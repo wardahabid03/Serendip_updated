@@ -37,7 +37,7 @@ class ReviewDetailSheet extends StatelessWidget {
               suffixIcon: IconButton(
                 icon: Icon(Icons.send),
                 onPressed: () {
-                  reviewProvider.addComment(review.placeId, review.reviewId, _commentController.text);
+                  reviewProvider.addComment(context,review.reviewId, _commentController.text);
                   _commentController.clear();
                 },
               ),
