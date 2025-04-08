@@ -605,17 +605,24 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
       },
     );
   }
-
 Widget _buildTripsSection(Map<String, dynamic> profile) {
   final trips = profile['trips'] as List<dynamic>? ?? [];
-// final String currentUserId = (profile['userId'] ?? '') as String;
-// print("Current user $currentUserId");
+  final tripImages = profile['tripImages'] as Map<String, List<dynamic>>? ?? {};
 
-void removeTrip(String tripId) {
-  setState(() {
-    trips.removeWhere((trip) => trip['tripId'] == tripId);
+  void removeTrip(String tripId) {
+    setState(() {
+      trips.removeWhere((trip) => trip['tripId'] == tripId);
+    });
+  }
+
+  // Sort the trips by 'created_at' (ISO 8601 format)
+  trips.sort((a, b) {
+    final dateA = DateTime.tryParse(a['created_at'] ?? '');
+    final dateB = DateTime.tryParse(b['created_at'] ?? '');
+
+    if (dateA == null || dateB == null) return 0; // Handle case where date is missing or invalid
+    return dateB.compareTo(dateA); // Sort in descending order (most recent first)
   });
-}
 
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -642,23 +649,44 @@ void removeTrip(String tripId) {
       const SizedBox(height: 8),
       if (trips.isEmpty)
         _buildEmptyTripsPlaceholder()
-        
       else
-    
         SizedBox(
           height: 220,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: trips.length,
             itemBuilder: (context, index) {
-              return TripCard(trip: trips[index], isCurrentUser: _isCurrentUser,onTripDeleted: removeTrip);},
+              final trip = trips[index];
+              final String tripId = trip['tripId'];
+
+              // Fetch image list for this trip
+              final List<dynamic> imagesForTrip = tripImages[tripId] ?? [];
+
+              // Extract image_url from first image if available
+              String? coverPhoto;
+              if (imagesForTrip.isNotEmpty) {
+                final firstImage = imagesForTrip.first;
+                if (firstImage is Map && firstImage['image_url'] != null) {
+                  coverPhoto = firstImage['image_url'] as String?;
+                }
+              }
+
+              return TripCard(
+                trip: trip,
+                isCurrentUser: _isCurrentUser,
+                onTripDeleted: removeTrip,
+                coverPhoto: coverPhoto, // Will be null if not available
+              );
+            },
           ),
         ),
     ],
   );
 }
 
-/// Placeholder UI when no trips exist
+
+
+
 Widget _buildEmptyTripsPlaceholder() {
   return Container(
     height: 200,
@@ -681,6 +709,7 @@ Widget _buildEmptyTripsPlaceholder() {
     ),
   );
 }
+
 Widget _buildPhotosSection(Map<String, dynamic> profile) {
   final tripImages = profile['tripImages'] as Map<String, List<dynamic>>? ?? {};
   final tripNames = profile['tripNames'] as Map<String, String>? ?? {};

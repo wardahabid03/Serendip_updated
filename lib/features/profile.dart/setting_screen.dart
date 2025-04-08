@@ -188,7 +188,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: OutlinedButton(
                       onPressed: () => _logout(context),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.red,
                         side: const BorderSide(color: Colors.red, width: 2),
                         minimumSize: const Size.fromHeight(50),
                         shape: RoundedRectangleBorder(

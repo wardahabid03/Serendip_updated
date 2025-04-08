@@ -11,17 +11,21 @@ class UserRepository {
 Future<List<UserModel>> searchUsersByName(String searchQuery) async {
   if (searchQuery.isEmpty) return [];
 
+  // Convert the search query to lowercase to make it case-insensitive
+  final lowercasedQuery = searchQuery.toLowerCase();
+
   QuerySnapshot snapshot = await _firestore
       .collection('users')
-      .orderBy('username')
-      .startAt([searchQuery])
-      .endAt([searchQuery + '\uf8ff']) // Ensures it captures all words starting with `searchQuery`
+      .orderBy('username') // Ensure 'username' is indexed in Firestore
+      .startAt([lowercasedQuery])
+      .endAt([lowercasedQuery + '\uf8ff']) // Captures all words starting with searchQuery (case-insensitive)
       .get();
 
   return snapshot.docs.map((doc) {
     return UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
   }).toList();
 }
+
 
 Future<List<UserModel>> findNearbyUsers(LatLng currentUserLocation, double radiusKm) async {
   print("🔍 Fetching user locations from Firebase...");

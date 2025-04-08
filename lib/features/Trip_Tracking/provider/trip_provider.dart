@@ -43,11 +43,16 @@ class TripProvider with ChangeNotifier {
   Timer? _uploadRetryTimer;
   Timer? _saveTripTimer;
 
+  final List<Map<String, dynamic>> _uploadQueue = [];
+  bool _isProcessingQueue = false;
+  final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+      GlobalKey<ScaffoldMessengerState>();
+
   String? getCurrentUserId() {
     User? user = FirebaseAuth.instance.currentUser;
     return user?.uid;
   }
-  
+
   final cloudinary = Cloudinary.signedConfig(
     apiKey: '935742635189255',
     apiSecret: 'u_1cFQsYmXSrXoDL_6gJbQWvQcA',
@@ -63,7 +68,7 @@ class TripProvider with ChangeNotifier {
   Future<void> _initializeFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
     final tripJson = prefs.getString('current_trip');
-    
+
     if (tripJson != null) {
       final tripData = json.decode(tripJson);
       _currentTrip = TripModel.fromMap(tripData, tripData['tripId']);
@@ -74,9 +79,8 @@ class TripProvider with ChangeNotifier {
 
     // Load pending image uploads
     final pendingUploads = prefs.getStringList('pending_uploads') ?? [];
-    _pendingImageUploads.addAll(
-      pendingUploads.map((upload) => json.decode(upload) as Map<String, dynamic>)
-    );
+    _pendingImageUploads.addAll(pendingUploads
+        .map((upload) => json.decode(upload) as Map<String, dynamic>));
   }
 
   void _startUploadRetryTimer() {
@@ -102,7 +106,8 @@ class TripProvider with ChangeNotifier {
     await prefs.setString('current_trip', json.encode(_currentTrip!.toMap()));
   }
 
-  void startTrip(String tripName, String userId, String description, String privacy, List<String> collaborators, LatLng startLocation) {
+  void startTrip(String tripName, String userId, String description,
+      String privacy, List<String> collaborators, LatLng startLocation) {
     print("🚀 startTrip() called in TripProvider!");
 
     _tripPath.clear();
@@ -141,7 +146,7 @@ class TripProvider with ChangeNotifier {
       navigatorKey.currentState!.overlay!.context,
       listen: false,
     );
-    
+
     mapController.addTripPolyline(_tripPath, "active_trip");
     mapController.addActiveTripCircle(startLocation);
 
@@ -161,7 +166,7 @@ class TripProvider with ChangeNotifier {
         navigatorKey.currentState!.overlay!.context,
         listen: false,
       );
-      
+
       mapController.addTripPolyline(_tripPath, "active_trip");
       mapController.addActiveTripCircle(location);
 
@@ -172,77 +177,107 @@ class TripProvider with ChangeNotifier {
     }
   }
 
-  Future<void> captureImage(File imageFile, LatLng location, BuildContext context) async {
-    if (_currentTrip == null) {
-      print("⚠️ No active trip to save the image.");
-      return;
-    }
 
-    if (_isUploading) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please wait for the previous upload to complete'))
-      );
-      return;
+Future<void> captureImage(File imageFile, LatLng location, BuildContext context) async {
+  if (_currentTrip == null) {
+    print("⚠️ No active trip to save the image.");
+    return;
+  }
+
+  try {
+    final imageId = const Uuid().v4();
+    final directory = await getApplicationDocumentsDirectory();
+    final savedImagePath = '${directory.path}/$imageId.jpg';
+    await imageFile.copy(savedImagePath);
+
+    final uploadData = {
+      'imageId': imageId,
+      'imagePath': savedImagePath,
+      'tripId': _currentTrip!.tripId,
+      'latitude': location.latitude,
+      'longitude': location.longitude,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    _uploadQueue.add(uploadData);
+    _saveQueueToPrefs(); // persist if needed
+    _triggerQueueProcessing();
+
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Image saved and queued for upload')),
+    );
+  } catch (e) {
+    print("❌ Error in captureImage: $e");
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(content: Text('Error saving image: ${e.toString()}')),
+    );
+  }
+}
+
+
+void _triggerQueueProcessing() {
+  if (_isProcessingQueue) return;
+  _processQueue();
+}
+
+Future<void> _processQueue() async {
+  _isProcessingQueue = true;
+
+  while (_uploadQueue.isNotEmpty) {
+    final uploadData = _uploadQueue.first;
+
+    final connectivity = await Connectivity().checkConnectivity();
+    if (connectivity == ConnectivityResult.none) {
+      print("📴 Offline. Pausing queue.");
+      break;
     }
 
     try {
-      _isUploading = true;
-      notifyListeners();
-
-      String imageId = const Uuid().v4();
-      final directory = await getApplicationDocumentsDirectory();
-      final savedImagePath = '${directory.path}/$imageId.jpg';
-      await imageFile.copy(savedImagePath);
-
-      final uploadData = {
-        'imageId': imageId,
-        'imagePath': savedImagePath,
-        'tripId': _currentTrip!.tripId,
-        'latitude': location.latitude,
-        'longitude': location.longitude,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-
-      // Check connectivity
-      final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult == ConnectivityResult.none) {
-        // Store for later upload
-        _pendingImageUploads.add(uploadData);
-        final prefs = await SharedPreferences.getInstance();
-        final pendingUploads = _pendingImageUploads.map((upload) => json.encode(upload)).toList();
-        await prefs.setStringList('pending_uploads', pendingUploads);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Image saved and will be uploaded when online'))
-        );
-      } else {
-        await _uploadImage(uploadData, context);
+      final ctx = navigatorKey.currentContext;
+      if (ctx == null) {
+        print("❌ Context is null. Can't upload.");
+        break;
       }
+
+      await Future.delayed(const Duration(milliseconds: 300)); // give UI time
+      await _uploadImage(uploadData, ctx);
+
+      _uploadQueue.removeAt(0);
+      _saveQueueToPrefs();
     } catch (e) {
-      print("❌ Error handling image: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving image: ${e.toString()}'))
-      );
-    } finally {
-      _isUploading = false;
-      notifyListeners();
+      print("❌ Upload failed, keeping in queue: $e");
+      break; // Don't remove, keep for retry
     }
   }
 
-Future<void> _uploadImage(Map<String, dynamic> uploadData, BuildContext context) async {
-  if (_isUploading) return; // Prevent multiple simultaneous uploads
-  _isUploading = true;
+  _isProcessingQueue = false;
+}
 
+Future<void> _saveQueueToPrefs() async {
+  final prefs = await SharedPreferences.getInstance();
+  final list = _uploadQueue.map((e) => json.encode(e)).toList();
+  await prefs.setStringList('upload_queue', list);
+}
+
+
+
+// Updated _uploadImage remains mostly unchanged
+Future<void> _uploadImage(Map<String, dynamic> uploadData, BuildContext context) async {
+  print("🚀 Starting image upload...");
   try {
+    final filePath = uploadData['imagePath'];
+    final fileBytes = await File(filePath).readAsBytes();
+
     final response = await cloudinary.upload(
-      file: uploadData['imagePath'],
-      fileBytes: await File(uploadData['imagePath']).readAsBytes(),
+      file: filePath,
+      fileBytes: fileBytes,
       resourceType: CloudinaryResourceType.image,
       folder: 'trip_images/${uploadData['tripId']}',
     );
 
     if (response.isSuccessful) {
-      String imageUrl = response.secureUrl!;
+      final imageUrl = response.secureUrl!;
+      print("✅ Image uploaded to Cloudinary: $imageUrl");
 
       await _firestore
           .collection('trips')
@@ -262,32 +297,30 @@ Future<void> _uploadImage(Map<String, dynamic> uploadData, BuildContext context)
         uploadData['imageId'],
         LatLng(uploadData['latitude'], uploadData['longitude']),
         imageUrl,
-        context
+        context,
       );
 
-      // Safely remove from pending uploads
       _pendingImageUploads.removeWhere((upload) => upload['imageId'] == uploadData['imageId']);
       await _updatePendingUploads();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Image uploaded successfully!'))
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text('Image uploaded successfully!')),
       );
+    } else {
+      throw Exception("Cloudinary upload failed: ${response.error}");
     }
   } catch (e) {
-    print("❌ Error uploading image: $e");
+    print("🚨 Upload error: $e");
+
     if (!_pendingImageUploads.any((upload) => upload['imageId'] == uploadData['imageId'])) {
       _pendingImageUploads.add(uploadData);
       await _updatePendingUploads();
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Upload failed. Will retry later.'))
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('Upload failed. Will retry later.')),
     );
-  } finally {
-    _isUploading = false; // Reset flag after upload completes
-    if (_pendingImageUploads.isNotEmpty) {
-      _uploadImage(_pendingImageUploads.first, context); // Retry next upload
-    }
+    throw e; // rethrow to keep item in queue
   }
 }
 
@@ -297,67 +330,57 @@ Future<void> _updatePendingUploads() async {
   await prefs.setStringList('pending_uploads', pendingUploads);
 }
 
+Future<void> _processPendingUploads() async {
+  if (_pendingImageUploads.isEmpty) return;
 
-  Future<void> _processPendingUploads() async {
-    if (_pendingImageUploads.isEmpty) return;
+  final connectivity = await Connectivity().checkConnectivity();
+  if (connectivity == ConnectivityResult.none) return;
 
-    final connectivity = await Connectivity().checkConnectivity();
-    if (connectivity == ConnectivityResult.none) return;
-
-    final uploads = List<Map<String, dynamic>>.from(_pendingImageUploads);
-    for (final upload in uploads) {
-   
-        final BuildContext? ctx = navigatorKey.currentContext;
-if (ctx != null) {
-  await _uploadImage(upload, ctx);
-}
-
-    
+  final uploads = List<Map<String, dynamic>>.from(_pendingImageUploads);
+  for (final upload in uploads) {
+    final BuildContext? ctx = navigatorKey.currentContext;
+    if (ctx != null) {
+      await _uploadImage(upload, ctx);
     }
   }
+}
 
-
-
-   void updateActiveTripOnMap() {
+  void updateActiveTripOnMap() {
     if (_currentTrip != null && _isRecording) {
       notifyListeners();
     }
   }
 
-   /// **Add trip ID to a user's document in Firestore**
-Future<void> addTripToUser(String userId, String tripId) async {
-  final userRef = _firestore.collection('users').doc(userId);
-  print('trip 1');
+  /// **Add trip ID to a user's document in Firestore**
+  Future<void> addTripToUser(String userId, String tripId) async {
+    final userRef = _firestore.collection('users').doc(userId);
+    print('trip 1');
 
-  await _firestore.runTransaction((transaction) async {
-    final userSnapshot = await transaction.get(userRef);
-    if (!userSnapshot.exists) return;
- print('trip 2');
-    final currentCount = userSnapshot.data()?['tripCount'] ?? 0;
-     print('trip 3');
-    transaction.update(userRef, {
-      'trips': FieldValue.arrayUnion([tripId]),
-      'tripCount': currentCount + 1,
-      
+    await _firestore.runTransaction((transaction) async {
+      final userSnapshot = await transaction.get(userRef);
+      if (!userSnapshot.exists) return;
+      print('trip 2');
+      final currentCount = userSnapshot.data()?['tripCount'] ?? 0;
+      print('trip 3');
+      transaction.update(userRef, {
+        'trips': FieldValue.arrayUnion([tripId]),
+        'tripCount': currentCount + 1,
+      });
+      print('trip 4');
     });
-     print('trip 4');
-  });
-}
-
+  }
 
 // **Save the trip to Firestore**
   Future<String> _saveTripToFirestore() async {
     if (_currentTrip == null) return '';
 
     final tripMap = _currentTrip!.toMap();
-    tripMap['trip_path'] = GeoJSONUtils.latLngListToGeoJSONString(_currentTrip!.tripPath);
+    tripMap['trip_path'] =
+        GeoJSONUtils.latLngListToGeoJSONString(_currentTrip!.tripPath);
 
     await _firestore.collection('trips').doc(_currentTrip!.tripId).set(tripMap);
     return _currentTrip!.tripId;
   }
-
-
-
 
   Future<void> stopTrip(LatLng endLocation) async {
     if (_currentTrip == null) return;
@@ -399,28 +422,27 @@ Future<void> addTripToUser(String userId, String tripId) async {
     super.dispose();
   }
 
-Future<List<Map<String, dynamic>>> fetchTripImages(String tripId) async {
-  try {
-    final snapshot = await _firestore
-        .collection('trips')
-        .doc(tripId)
-        .collection('images')
-        .get();
+  Future<List<Map<String, dynamic>>> fetchTripImages(String tripId) async {
+    try {
+      final snapshot = await _firestore
+          .collection('trips')
+          .doc(tripId)
+          .collection('images')
+          .get();
 
-    return snapshot.docs.map((doc) {
-      return {
-        'image_url': doc['image_url'],
-        'latitude': doc['latitude'],
-        'longitude': doc['longitude'],
-        'timestamp': doc['timestamp'],
-      };
-    }).toList();
-  } catch (e) {
-    print("Error fetching images for trip $tripId: $e");
-    return [];
+      return snapshot.docs.map((doc) {
+        return {
+          'image_url': doc['image_url'],
+          'latitude': doc['latitude'],
+          'longitude': doc['longitude'],
+          'timestamp': doc['timestamp'],
+        };
+      }).toList();
+    } catch (e) {
+      print("Error fetching images for trip $tripId: $e");
+      return [];
+    }
   }
-}
-
 
   Future<TripModel?> fetchTripById(String tripId) async {
     try {
@@ -436,7 +458,8 @@ Future<List<Map<String, dynamic>>> fetchTripImages(String tripId) async {
     }
   }
 
-Future<void> fetchTrips({required String userId, required String filter}) async {
+  Future<void> fetchTrips(
+      {required String userId, required String filter}) async {
     QuerySnapshot tripSnapshot;
 
     if (filter == 'My Trips') {
@@ -456,8 +479,7 @@ Future<void> fetchTrips({required String userId, required String filter}) async 
         tripSnapshot = await _firestore
             .collection('trips')
             .where('user_id', whereIn: friends)
-            .where('privacy', whereIn: ['friends', 'public']) 
-            .get();
+            .where('privacy', whereIn: ['friends', 'public']).get();
       } else {
         return;
       }
@@ -469,97 +491,99 @@ Future<void> fetchTrips({required String userId, required String filter}) async 
     }
 
     _trips = tripSnapshot.docs
-        .map((doc) => TripModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .map((doc) =>
+            TripModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
         .toList();
 
     notifyListeners();
   }
 
-
   Future<void> deleteTrip(String tripId) async {
-  final FirebaseFirestore firestore = FirebaseFirestore.instance;
+    final FirebaseFirestore firestore = FirebaseFirestore.instance;
     String? currentUserId = getCurrentUserId();
-  WriteBatch batch = firestore.batch();
+    WriteBatch batch = firestore.batch();
 
-  try {
-    // Reference to the trip document
-    DocumentReference tripRef = firestore.collection('trips').doc(tripId);
+    try {
+      // Reference to the trip document
+      DocumentReference tripRef = firestore.collection('trips').doc(tripId);
 
-    // Reference to user document
-    DocumentReference userRef = firestore.collection('users').doc(currentUserId);
+      // Reference to user document
+      DocumentReference userRef =
+          firestore.collection('users').doc(currentUserId);
 
-    // Get the user document snapshot
-    DocumentSnapshot userSnapshot = await userRef.get();
+      // Get the user document snapshot
+      DocumentSnapshot userSnapshot = await userRef.get();
 
-    if (!userSnapshot.exists) {
-      throw Exception("User document does not exist");
+      if (!userSnapshot.exists) {
+        throw Exception("User document does not exist");
+      }
+
+      // Extract user's tripCount (default to 0 if not present)
+      int tripCount = (userSnapshot['tripCount'] ?? 0) - 1;
+      if (tripCount < 0) tripCount = 0; // Ensure tripCount is not negative
+
+      // Delete the trip document
+      batch.delete(tripRef);
+
+      // Remove the trip ID from the user's trips list and update tripCount
+      batch.update(userRef, {
+        'trips': FieldValue.arrayRemove([tripId]),
+        'tripCount': tripCount, // Update the trip count
+      });
+
+      // Commit batch
+      await batch.commit();
+      print("✅ Trip deleted successfully.");
+    } catch (e) {
+      print("❌ Error deleting trip: $e");
     }
-
-    // Extract user's tripCount (default to 0 if not present)
-    int tripCount = (userSnapshot['tripCount'] ?? 0) - 1;
-    if (tripCount < 0) tripCount = 0; // Ensure tripCount is not negative
-
-    // Delete the trip document
-    batch.delete(tripRef);
-
-    // Remove the trip ID from the user's trips list and update tripCount
-    batch.update(userRef, {
-      'trips': FieldValue.arrayRemove([tripId]),
-      'tripCount': tripCount, // Update the trip count
-    });
-
-    // Commit batch
-    await batch.commit();
-    print("✅ Trip deleted successfully.");
-  } catch (e) {
-    print("❌ Error deleting trip: $e");
   }
-}
 
-Future<void> deleteTripImage(String tripId, String imageId) async {
-  print("------------");
-  print(tripId);
+  Future<void> deleteTripImage(String tripId, String imageId) async {
+    print("------------");
+    print(tripId);
     print(imageId);
 
-  try {
-    // Reference to Firestore image document
-    DocumentReference imageRef = _firestore.collection('trips').doc(tripId).collection('images').doc(imageId);
+    try {
+      // Reference to Firestore image document
+      DocumentReference imageRef = _firestore
+          .collection('trips')
+          .doc(tripId)
+          .collection('images')
+          .doc(imageId);
 
-    // Get image data before deleting
-    DocumentSnapshot imageSnapshot = await imageRef.get();
-    if (!imageSnapshot.exists) return;
+      // Get image data before deleting
+      DocumentSnapshot imageSnapshot = await imageRef.get();
+      if (!imageSnapshot.exists) return;
 
-    Map<String, dynamic>? imageData = imageSnapshot.data() as Map<String, dynamic>?;
-    String imageUrl = imageData?['image_url'] ?? '';
+      Map<String, dynamic>? imageData =
+          imageSnapshot.data() as Map<String, dynamic>?;
+      String imageUrl = imageData?['image_url'] ?? '';
 
-    // Delete image from Firebase Storage
-    // if (imageUrl.isNotEmpty) {
-    //   await _storage.refFromURL(imageUrl).delete();
-    // }
+      // Delete image from Firebase Storage
+      // if (imageUrl.isNotEmpty) {
+      //   await _storage.refFromURL(imageUrl).delete();
+      // }
 
-    // Remove image from Firestore
-    await imageRef.delete();
+      // Remove image from Firestore
+      await imageRef.delete();
 
-    print("✅ Image deleted successfully.");
+      print("✅ Image deleted successfully.");
 
-    // Remove marker from the map
-    _markers.removeWhere((marker) => marker.markerId.value == imageId);
-    notifyListeners();
-  } catch (e) {
-    print("❌ Error deleting image: $e");
+      // Remove marker from the map
+      _markers.removeWhere((marker) => marker.markerId.value == imageId);
+      notifyListeners();
+    } catch (e) {
+      print("❌ Error deleting image: $e");
+    }
   }
-}
-
-
 
   Stream<List<Map<String, dynamic>>> getTripImagesStream(String tripId) {
-  return FirebaseFirestore.instance
-      .collection('trips')
-      .doc(tripId)
-      .collection('images')
-      .snapshots()
-      .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
-}
-
-
+    return FirebaseFirestore.instance
+        .collection('trips')
+        .doc(tripId)
+        .collection('images')
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:intl_phone_number_input/intl_phone_number_input.dart';
+import 'package:flutter/services.dart';
 
 class TextInputField extends StatefulWidget {
   final TextEditingController controller;
@@ -11,8 +12,10 @@ class TextInputField extends StatefulWidget {
   final IconData? suffixIcon; // Make the suffixIcon optional (now IconData)
   final String? Function(String?)? validator; // Validator function
   final String? errorText; // Optional error text for external error handling
-  final bool isPhoneNumber; // Flag to indicate if this is for phone number input
+  final bool
+      isPhoneNumber; // Flag to indicate if this is for phone number input
   final bool isDateField; // Flag to indicate if this is a date picker field
+  final bool isLowercase; // Flag to indicate lowercase input
 
   const TextInputField({
     Key? key,
@@ -26,6 +29,7 @@ class TextInputField extends StatefulWidget {
     this.errorText,
     this.isPhoneNumber = false, // Check if this is a phone number input
     this.isDateField = false, // Check if this is a date picker input
+    this.isLowercase = false, // Default is false
   }) : super(key: key);
 
   @override
@@ -85,9 +89,9 @@ class _TextInputFieldState extends State<TextInputField> {
                         // Capture formatted phone number
                         _formattedPhoneNumber = number.phoneNumber ?? '';
                         print('Formatted phone number: $_formattedPhoneNumber');
-                        // controller = _formattedPhoneNumber as TextEditingController;
                       },
-                      initialValue: PhoneNumber(isoCode: 'US'), // Default country code
+                      initialValue:
+                          PhoneNumber(isoCode: 'US'), // Default country code
                       textFieldController: _phoneController,
                       selectorConfig: SelectorConfig(
                         selectorType: PhoneInputSelectorType.DIALOG,
@@ -95,7 +99,8 @@ class _TextInputFieldState extends State<TextInputField> {
                         setSelectorButtonAsPrefixIcon: true,
                         leadingPadding: 10,
                       ),
-                      formatInput: true, // Allow input to be formatted automatically
+                      formatInput:
+                          true, // Allow input to be formatted automatically
                       inputDecoration: InputDecoration(
                         filled: true,
                         fillColor: Colors.transparent,
@@ -187,6 +192,22 @@ class _TextInputFieldState extends State<TextInputField> {
                         color: isDarkMode ? Colors.white : Colors.black,
                         fontSize: 16,
                       ),
+                      inputFormatters: widget.isLowercase
+                          ? [
+                              FilteringTextInputFormatter.allow(RegExp(
+                                  r'[a-z0-9\s!@#\$%^&*(),.?":{}|<>_\-+=\\]')) // Allow lowercase letters, digits, spaces, and special characters
+                            ]
+                          : [],
+                      onChanged: widget.isLowercase
+                          ? (value) {
+                              widget.controller.text = value
+                                  .toLowerCase(); // Convert input to lowercase
+                              widget.controller.selection =
+                                  TextSelection.collapsed(
+                                      offset: value
+                                          .length); // Keep cursor at the end
+                            }
+                          : null,
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: Colors.transparent,

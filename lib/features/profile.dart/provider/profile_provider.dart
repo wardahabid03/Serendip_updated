@@ -95,63 +95,67 @@ class ProfileProvider extends ChangeNotifier {
       throw Exception('Failed to save profile: ${e.toString()}');
     }
   }
+Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
+  try {
+    final String uid = userId ?? _auth.currentUser?.uid ?? '';
 
-  Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
-    try {
-      final String uid = userId ?? _auth.currentUser?.uid ?? '';
-
-      if (uid.isEmpty) {
-        throw Exception('User not logged in');
-      }
-
-      final snapshot = await _firestore.collection('users').doc(uid).get();
-
-      if (!snapshot.exists) {
-        if (userId == null) {
-          _isProfileComplete = false;
-          notifyListeners();
-        }
-        return {};
-      }
-
-      final data = snapshot.data() as Map<String, dynamic>;
-
-      List<Map<String, dynamic>> trips = await fetchUserTrips(userId: uid);
-
-      Map<String, String> tripNames = {};
-      for (var trip in trips) {
-        tripNames[trip['tripId']] = trip['trip_name'] ?? 'Unnamed Trip';
-      }
-
-      Map<String, List<Map<String, dynamic>>> tripImages = {};
-      for (var trip in trips) {
-        String tripId = trip['tripId'] as String;
-        List<Map<String, dynamic>> images = await fetchTripImages(tripId);
-        tripImages[tripId] = images;
-      }
-
-      _isProfileComplete = data['isProfileComplete'] ?? false;
-      int friendsCount = await _countFriends(uid);
-      List<Map<String, dynamic>> friendsDetails = await fetchFriendsDetails(uid);
-      bool areFriends = await _checkIfFriends(uid);
-
-      _userProfile = {
-        ...data,
-        'friendsCount': friendsCount,
-        'friendsDetails': friendsDetails,
-        'areFriends': areFriends,
-        'tripIds': tripNames.keys.toList(),
-        'trips': trips,
-        'tripImages': tripImages,
-        'tripNames': tripNames,
-      };
-
-      notifyListeners();
-      return _userProfile;
-    } catch (e) {
-      throw Exception('Failed to fetch profile: ${e.toString()}');
+    if (uid.isEmpty) {
+      throw Exception('User not logged in');
     }
+
+    final snapshot = await _firestore.collection('users').doc(uid).get();
+
+    if (!snapshot.exists) {
+      if (userId == null) {
+        _isProfileComplete = false;
+        notifyListeners();
+      }
+      return {};
+    }
+
+    final data = snapshot.data() as Map<String, dynamic>;
+
+    List<Map<String, dynamic>> trips = await fetchUserTrips(userId: uid);
+
+    Map<String, String> tripNames = {};
+    for (var trip in trips) {
+      tripNames[trip['tripId']] = trip['trip_name'] ?? 'Unnamed Trip';
+    }
+
+    Map<String, List<Map<String, dynamic>>> tripImages = {};
+    int photoCount = 0; // ⬅️ NEW
+
+    for (var trip in trips) {
+      String tripId = trip['tripId'] as String;
+      List<Map<String, dynamic>> images = await fetchTripImages(tripId);
+      tripImages[tripId] = images;
+      photoCount += images.length; // ⬅️ Count images
+    }
+
+    _isProfileComplete = data['isProfileComplete'] ?? false;
+    int friendsCount = await _countFriends(uid);
+    List<Map<String, dynamic>> friendsDetails = await fetchFriendsDetails(uid);
+    bool areFriends = await _checkIfFriends(uid);
+
+    _userProfile = {
+      ...data,
+      'friendsCount': friendsCount,
+      'friendsDetails': friendsDetails,
+      'areFriends': areFriends,
+      'tripIds': tripNames.keys.toList(),
+      'trips': trips,
+      'tripImages': tripImages,
+      'tripNames': tripNames,
+      'photoCount': photoCount, // ✅ ADDED HERE
+    };
+
+    notifyListeners();
+    return _userProfile;
+  } catch (e) {
+    throw Exception('Failed to fetch profile: ${e.toString()}');
   }
+}
+
 
   Future<List<Map<String, dynamic>>> fetchTripImages(String tripId) async {
     try {

@@ -60,18 +60,22 @@ class MapController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // In MapController
-  void toggleReviewLayer(bool active) {
-    toggleLayer('reviews_layer', active); // This will toggle review layer based on 'active' state
-  }
+ void toggleReviewLayer(bool active) {
+  toggleLayer('reviews_layer', active);
+  _reviewLayer.setActive(active); // 👈 Tell the layer to stop returning markers
+}
 
   MapLayer? getLayer(String layerId) => _layers[layerId];
 
   void toggleLayer(String layerId, bool active) {
     if (active) {
       _activeLayers.add(layerId);
+
+      print("Added $layerId");
     } else {
       _activeLayers.remove(layerId);
+
+      print("Removed $layerId");
     }
     notifyListeners();
   }

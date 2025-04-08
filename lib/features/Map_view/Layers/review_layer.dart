@@ -31,30 +31,39 @@ class ReviewLayer extends MapLayer {
     _loadAllReviews();
   }
 
-  @override
-  Set<Marker> getMarkers() {
-    Set<Marker> markers = {};
-    print('get markers');
+  bool _isActive = true;
 
-    if (isControllerReady) {
-      for (var review in reviewProvider.reviews) {
-        final latLng = _getLatLngFromReviewId(review.reviewId);
-        final markerIcon =
-            _markerCache[review.reviewId] ?? BitmapDescriptor.defaultMarker;
+void setActive(bool value) {
+  _isActive = value;
+  notifyListeners(); // trigger update in MapController
+}
 
-        markers.add(Marker(
-          markerId: MarkerId(review.reviewId),
-          position: latLng,
-          icon: markerIcon,
-          infoWindow: InfoWindow(title: review.placeName),
-          onTap: () => _showReviewDetails(review),
-        ));
 
-        print('marker added');
-      }
-    }
-    return markers;
+@override
+Set<Marker> getMarkers() {
+  if (!_isActive || !isControllerReady) {
+    return {};
   }
+
+  Set<Marker> markers = {};
+  print('get markers');
+
+  for (var review in reviewProvider.reviews) {
+    final latLng = _getLatLngFromReviewId(review.reviewId);
+    final markerIcon =
+        _markerCache[review.reviewId] ?? BitmapDescriptor.defaultMarker;
+
+    markers.add(Marker(
+      markerId: MarkerId(review.reviewId),
+      position: latLng,
+      icon: markerIcon,
+      infoWindow: InfoWindow(title: review.placeName),
+      onTap: () => _showReviewDetails(review),
+    ));
+  }
+  return markers;
+}
+
 
   @override
   Set<Polyline> getPolylines() => {};

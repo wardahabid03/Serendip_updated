@@ -165,6 +165,7 @@ Future<void> _saveProfile(BuildContext context) async {
                 controller: _usernameController,
                 hintText: 'Username',
                 prefixIcon: Icons.person_outline,
+                isLowercase: true, // Enable lowercase input for username
               ),
               const SizedBox(height: 15),
               TextInputField(
@@ -183,7 +184,7 @@ Future<void> _saveProfile(BuildContext context) async {
               const SizedBox(height: 20),
               SwitchListTile(
                 title: const Text('Enable Location'),
-                subtitle: const Text('Required for better experience'),
+                subtitle: const Text('Let others know your location'),
                 value: _isLocationEnabled,
                 onChanged: (bool value) async {
                   if (value) {

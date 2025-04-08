@@ -1,19 +1,21 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:serendip/features/Trip_Tracking/provider/trip_provider.dart';
-
 import '../../../../core/routes.dart';
 import '../../provider/profile_provider.dart';
 
 class TripCard extends StatefulWidget {
   final Map<String, dynamic> trip;
   final bool isCurrentUser;
-  final Function(String) onTripDeleted; // Callback to update UI
+  final String? coverPhoto;
+  final Function(String) onTripDeleted;
 
   const TripCard({
     required this.trip,
     required this.isCurrentUser,
-    required this.onTripDeleted, // Pass function to parent
+    required this.onTripDeleted,
+    this.coverPhoto,
     Key? key,
   }) : super(key: key);
 
@@ -25,20 +27,13 @@ class _TripCardState extends State<TripCard> {
   List<String> collaboratorNames = [];
   bool isLoading = true;
 
+  late final String? _coverPhoto; // ✅ Cached cover photo
+
   @override
   void initState() {
     super.initState();
+    _coverPhoto = widget.coverPhoto; // ✅ Set once
     _fetchCollaborators();
-  }
-
-  String _formatDate(String timestamp) {
-    try {
-      DateTime dateTime = DateTime.parse(timestamp);
-      return "${dateTime.day}-${dateTime.month}-${dateTime.year}";
-    } catch (e) {
-      print("Error parsing date: $e");
-      return "Invalid Date";
-    }
   }
 
   Future<void> _fetchCollaborators() async {
@@ -47,7 +42,8 @@ class _TripCardState extends State<TripCard> {
     List<dynamic> collaborators = widget.trip['collaborators'] ?? [];
 
     List<String> names = await Future.wait(
-        collaborators.map((userId) => profileProvider.getUsernameById(userId)));
+      collaborators.map((userId) => profileProvider.getUsernameById(userId)),
+    );
 
     setState(() {
       collaboratorNames = names;
@@ -55,8 +51,24 @@ class _TripCardState extends State<TripCard> {
     });
   }
 
+  String _formatDate(String timestamp) {
+    try {
+      final dateTime = DateTime.parse(timestamp);
+      return "${dateTime.day}-${dateTime.month}-${dateTime.year}";
+    } catch (e) {
+      return "Invalid Date";
+    }
+  }
+
+  String _getCollaboratorsDisplay() {
+    if (collaboratorNames.length <= 1) return "Solo Trip";
+    return collaboratorNames.length > 2
+        ? "${collaboratorNames.take(2).join(", ")} +${collaboratorNames.length - 2} more"
+        : collaboratorNames.join(", ");
+  }
+
   void _confirmDeleteTrip() async {
-    bool? confirm = await showDialog<bool>(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text("Delete Trip?"),
@@ -75,24 +87,15 @@ class _TripCardState extends State<TripCard> {
       ),
     );
 
-    if (confirm == true) {
-      _deleteTrip();
-    }
+    if (confirm == true) _deleteTrip();
   }
 
   void _deleteTrip() async {
     try {
-      print(widget.trip);
-      print(widget.trip['tripId']);
-
       await Provider.of<TripProvider>(context, listen: false)
           .deleteTrip(widget.trip['tripId']);
-
-      // Notify parent widget to remove trip from list
       widget.onTripDeleted(widget.trip['tripId']);
-      print('Trip deleted');
     } catch (e) {
-      print("Error deleting trip: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text("Failed to delete trip. Please try again.")),
@@ -102,15 +105,8 @@ class _TripCardState extends State<TripCard> {
 
   @override
   Widget build(BuildContext context) {
-    final String tripName = widget.trip['trip_name'];
+    final String tripName = widget.trip['trip_name'] ?? 'Unnamed Trip';
     final String createdAt = _formatDate(widget.trip['created_at']);
-    final bool isCollaborative = collaboratorNames.length > 1;
-
-    String collaboratorsDisplay = isCollaborative
-        ? (collaboratorNames.length > 2
-            ? "${collaboratorNames.take(2).join(", ")} +${collaboratorNames.length - 2} more"
-            : collaboratorNames.join(", "))
-        : "Solo Trip";
 
     return GestureDetector(
       onTap: () {
@@ -139,23 +135,38 @@ class _TripCardState extends State<TripCard> {
           borderRadius: BorderRadius.circular(12),
           child: Stack(
             children: [
-              // Background Content
-              Container(
-                width: double.infinity,
-                height: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.7),
-                    ],
+              // 🖼️ Cover Image
+              Positioned.fill(
+                child: _coverPhoto != null && _coverPhoto.isNotEmpty
+                    ? CachedNetworkImage(
+                        imageUrl: _coverPhoto,
+                        fit: BoxFit.cover,
+                      )
+                    : Container(color: Colors.grey[300]),
+              ),
+
+              // 🌈 Gradient Overlay
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.7),
+                      ],
+                    ),
                   ),
                 ),
-                padding: const EdgeInsets.all(12),
+              ),
+
+              // 📝 Trip Info
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
@@ -176,7 +187,7 @@ class _TripCardState extends State<TripCard> {
                         fontSize: 12,
                       ),
                     ),
-                    if (isCollaborative) ...[
+                    if (collaboratorNames.length > 1) ...[
                       const SizedBox(height: 6),
                       Row(
                         children: [
@@ -187,7 +198,7 @@ class _TripCardState extends State<TripCard> {
                             child: Text(
                               isLoading
                                   ? "Loading collaborators..."
-                                  : "Collaborators: $collaboratorsDisplay",
+                                  : "Collaborators: ${_getCollaboratorsDisplay()}",
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 12,
@@ -202,7 +213,7 @@ class _TripCardState extends State<TripCard> {
                 ),
               ),
 
-              // Delete Button (Only visible for current user)
+              // ❌ Delete Button
               if (widget.isCurrentUser)
                 Positioned(
                   top: 6,

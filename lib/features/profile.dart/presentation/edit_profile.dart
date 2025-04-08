@@ -17,7 +17,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _dobController = TextEditingController();
   String? _profileImageUrl;
-  bool _isLocationEnabled = false;
+  bool _isLocationEnabled = false;  // Represents location privacy (share location) 
   bool _isPublicAccount = true;
 
   Future<void> _loadUserProfile() async {
@@ -30,7 +30,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _emailController.text = userProfile['email'] ?? '';
         _dobController.text = userProfile['dob'] ?? '';
         _profileImageUrl = userProfile['profileImage'];
-        _isLocationEnabled = userProfile['locationEnabled'] ?? false;
+        _isLocationEnabled = userProfile['locationEnabled'] ?? false;  // Store as privacy flag
         _isPublicAccount = userProfile['isPublic'] ?? true;
       });
     } catch (e) {
@@ -42,10 +42,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _checkLocationPermission() async {
     final status = await Permission.location.request();
-    setState(() {
-      _isLocationEnabled = status.isGranted;
-    });
-    
     if (!status.isGranted) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -77,10 +73,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         dob: _dobController.text,
         isPublic: _isPublicAccount,
         profileImage: _profileImageUrl ?? '',
-        locationEnabled: _isLocationEnabled,
+        locationEnabled: _isLocationEnabled, // Save location privacy setting
       );
 
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated successfully!')),
       );
@@ -182,12 +177,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 controller: _usernameController,
                 hintText: 'Username',
                 prefixIcon: Icons.person_outline,
+                isLowercase: true,
               ),
               const SizedBox(height: 15),
               TextInputField(
                 controller: _emailController,
                 hintText: 'Email',
-                // enabled: false, // Email is read-only
                 prefixIcon: Icons.email_outlined,
               ),
               const SizedBox(height: 15),
@@ -200,17 +195,13 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 20),
               SwitchListTile(
-                title: const Text('Enable Location'),
-                subtitle: const Text('Required for better experience'),
+                title: const Text('Enable Location Sharing'),
+                subtitle: const Text('Share your location with others'),
                 value: _isLocationEnabled,
-                onChanged: (bool value) async {
-                  if (value) {
-                    await _checkLocationPermission();
-                  } else {
-                    setState(() {
-                      _isLocationEnabled = false;
-                    });
-                  }
+                onChanged: (bool value) {
+                  setState(() {
+                    _isLocationEnabled = value;
+                  });
                 },
               ),
               const SizedBox(height: 10),
