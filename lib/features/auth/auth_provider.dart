@@ -47,6 +47,8 @@ class AuthProvider with ChangeNotifier {
         Navigator.pushReplacementNamed(context, AppRoutes.create_profile);
       }
     } catch (e) {
+      print('sign up failed');
+      print(e);
       _errorMessage = 'Sign up failed: $e';
       notifyListeners();
     }

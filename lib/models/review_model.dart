@@ -6,8 +6,10 @@ class ReviewModel {
   final String text;
   final Timestamp timestamp;
   final List<Map<String, dynamic>> comments;
-  final String userId;  // ✅ New field
-  final String userName; // ✅ New field
+  final String userId;
+  final String userName;
+  final double rating;
+  final int totalRatings;
 
   ReviewModel({
     required this.reviewId,
@@ -17,17 +19,21 @@ class ReviewModel {
     required this.comments,
     required this.userId,
     required this.userName,
+    required this.rating,
+    required this.totalRatings,
   });
 
   factory ReviewModel.fromFirestore(Map<String, dynamic> data) {
     return ReviewModel(
-      reviewId: data['reviewId'],
-      placeName: data['placeName'],
-      text: data['text'],
-      timestamp: data['timestamp'],
+      reviewId: data['reviewId'] ?? '',
+      placeName: data['placeName'] ?? '',
+      text: data['text'] ?? '',
+      timestamp: data['timestamp'] ?? Timestamp.now(),
       comments: List<Map<String, dynamic>>.from(data['comments'] ?? []),
-      userId: data['userId'] ?? "",  // ✅ Ensure it’s not null
-      userName: data['userName'] ?? "Unknown",
+      userId: data['userId'] ?? '',
+      userName: data['userName'] ?? 'Anonymous',
+      rating: (data['rating'] ?? 0.0).toDouble(),
+      totalRatings: data['totalRatings'] ?? 0,
     );
   }
 
@@ -38,8 +44,10 @@ class ReviewModel {
       'text': text,
       'timestamp': timestamp,
       'comments': comments,
-      'userId': userId,  // ✅ Send userId to Firestore
-      'userName': userName, // ✅ Send userName to Firestore
+      'userId': userId,
+      'userName': userName,
+      'rating': rating,
+      'totalRatings': totalRatings,
     };
   }
 }

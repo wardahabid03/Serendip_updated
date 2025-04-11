@@ -4,120 +4,123 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:serendip/features/profile.dart/provider/profile_provider.dart';
 import '../../models/review_model.dart';
-import 'package:geocoding/geocoding.dart'; // Import geocoding
 
 class ReviewProvider with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-
   List<ReviewModel> _reviews = [];
+  bool _showReviews = true;
 
   List<ReviewModel> get reviews => _reviews;
+  bool get showReviews => _showReviews;
 
-Future<void> fetchAllReviews() async {
-  try {
-    print("Fetching all reviews");
-    
-    final querySnapshot = await _firestore.collection('reviews').get();
-
-    // ✅ Convert each document snapshot into ReviewModel correctly
-    _reviews = querySnapshot.docs.map((doc) {
-      final data = doc.data();  // ✅ Call `.data()` to extract the map
-      return ReviewModel.fromFirestore(data); 
-    }).toList();
-
-    print("Fetched ${_reviews.length} reviews successfully!");
-    
+  void toggleReviews(bool value) {
+    _showReviews = value;
     notifyListeners();
-  } catch (e) {
-    print("Error fetching reviews: $e");
-  }
-}
-
-Future<void> addReview(String reviewId, String placeName, String text, BuildContext context) async {
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) {
-    print("No user signed in");
-    return;
-  }
-  print("Adding review for User ID: ${user.uid}");
-
-  try {
-    final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
-    String userName = await profileProvider.getUsernameById(user.uid);
-    print("Fetched username: $userName");
-
-    final newReview = ReviewModel(
-      reviewId: reviewId,  
-      placeName: placeName,
-      text: text,
-      timestamp: Timestamp.now(),
-      comments: [],
-      userId: user.uid,
-      userName: userName,
-    );
-
-    await _firestore.collection('reviews').add(newReview.toFirestore());
-
-    print("Review added successfully by $userName");
-
-    // ✅ Fetch the updated list of reviews
-    await fetchAllReviews();
-
-    // ✅ Force UI update
-    notifyListeners();
-  } catch (e) {
-    print("Error adding review: $e");
-  }
-}
-
-
-
-Future<void> addComment(BuildContext context, String reviewId, String commentText) async {
-  final reviewRef = _firestore.collection('reviews').where('reviewId', isEqualTo: reviewId);
-
-  // Get the current user ID
-  final user = FirebaseAuth.instance.currentUser;
-  if (user == null) {
-    print("No user signed in");
-    return;
   }
 
-  // Fetch the username from ProfileProvider using the userId
-  final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
-  String userName = await profileProvider.getUsernameById(user.uid);
+  Future<void> fetchAllReviews() async {
+    try {
+      print("Fetching all reviews");
 
-  // Create the new comment
-  final newComment = {
-    'userName': userName,
-    'text': commentText,
-    'timestamp': Timestamp.now(),
-  };
+      final querySnapshot = await _firestore.collection('reviews').get();
 
-  // ✅ Fetch the document ID first
-  QuerySnapshot snapshot = await reviewRef.get();
-  if (snapshot.docs.isEmpty) {
-    print("Review not found for ID: $reviewId");
-    return;
+      _reviews = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        return ReviewModel.fromFirestore(data);
+      }).toList();
+
+      print("Fetched ${_reviews.length} reviews successfully!");
+      notifyListeners();
+    } catch (e) {
+      print("Error fetching reviews: $e");
+    }
   }
-  String docId = snapshot.docs.first.id; // Get the actual Firestore document ID
-  final docRef = _firestore.collection('reviews').doc(docId);
 
-  // ✅ Update Firestore
-  await docRef.update({
-    'comments': FieldValue.arrayUnion([newComment])
-  }).then((_) async {
-    print("Comment added successfully");
+  Future<void> addReview(String reviewId, String placeName, String text, double rating, BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print("No user signed in");
+      return;
+    }
 
-    // ✅ Re-fetch all reviews from Firestore (to update UI)
-    await fetchAllReviews();
+    try {
+      final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+      String userName = await profileProvider.getUsernameById(user.uid) ?? 'Anonymous';
 
-    // ✅ Notify UI to rebuild
-    notifyListeners();
-  }).catchError((error) {
-    print("Failed to add comment: $error");
-  });
-}
+      final newReview = ReviewModel(
+        reviewId: reviewId,
+        placeName: placeName,
+        text: text,
+        timestamp: Timestamp.now(),
+        comments: [],
+        userId: user.uid,
+        userName: userName,
+        rating: rating,
+        totalRatings: 1,
+      );
 
+      await _firestore.collection('reviews').add(newReview.toFirestore());
+      print("Review added successfully by $userName");
 
+      await fetchAllReviews();
+    } catch (e) {
+      print("Error adding review: $e");
+    }
+  }
 
+  Future<void> addComment(
+    BuildContext context,
+    String reviewId,
+    String commentText,
+    double userRating,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print("No user signed in");
+      return;
+    }
+
+    try {
+      final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+      String userName = await profileProvider.getUsernameById(user.uid) ?? 'Anonymous';
+
+      final reviewQuery = await _firestore
+          .collection('reviews')
+          .where('reviewId', isEqualTo: reviewId)
+          .get();
+
+      if (reviewQuery.docs.isEmpty) {
+        print("Review not found for ID: $reviewId");
+        return;
+      }
+
+      final docSnapshot = reviewQuery.docs.first;
+      final docRef = _firestore.collection('reviews').doc(docSnapshot.id);
+
+      final existingData = docSnapshot.data();
+      final currentRating = (existingData['rating'] ?? 0).toDouble();
+      final totalRatings = (existingData['totalRatings'] ?? 0).toInt();
+
+      final newTotalRatings = totalRatings + 1;
+      final newAvgRating = ((currentRating * totalRatings) + userRating) / newTotalRatings;
+
+      final newComment = {
+        'userId': user.uid,
+        'userName': userName,
+        'text': commentText,
+        'timestamp': Timestamp.now(),
+      };
+
+      await docRef.update({
+        'comments': FieldValue.arrayUnion([newComment]),
+        'rating': newAvgRating,
+        'totalRatings': newTotalRatings,
+      });
+
+      print("Comment & rating added successfully");
+      await fetchAllReviews();
+    } catch (e) {
+      print("Error adding comment: $e");
+    }
+  }
 }

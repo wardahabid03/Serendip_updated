@@ -3,10 +3,12 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloudinary/cloudinary.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+ import 'package:geocoding/geocoding.dart';
 
 class ProfileProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -31,6 +33,8 @@ class ProfileProvider extends ChangeNotifier {
   bool _isProfileComplete = false;
 
   bool get isProfileComplete => _isProfileComplete;
+
+  Map<String, String?> _profileImageCache = {}; 
 
   Future<String?> pickAndUploadImage() async {
     try {
@@ -95,6 +99,10 @@ class ProfileProvider extends ChangeNotifier {
       throw Exception('Failed to save profile: ${e.toString()}');
     }
   }
+
+
+
+
 Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
   try {
     final String uid = userId ?? _auth.currentUser?.uid ?? '';
@@ -123,19 +131,53 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
     }
 
     Map<String, List<Map<String, dynamic>>> tripImages = {};
-    int photoCount = 0; // ⬅️ NEW
+    int photoCount = 0;
 
     for (var trip in trips) {
       String tripId = trip['tripId'] as String;
       List<Map<String, dynamic>> images = await fetchTripImages(tripId);
       tripImages[tripId] = images;
-      photoCount += images.length; // ⬅️ Count images
+      photoCount += images.length;
     }
 
     _isProfileComplete = data['isProfileComplete'] ?? false;
     int friendsCount = await _countFriends(uid);
     List<Map<String, dynamic>> friendsDetails = await fetchFriendsDetails(uid);
     bool areFriends = await _checkIfFriends(uid);
+
+    /// 🔥 Fetch current location from Realtime Database
+    final locationSnapshot = await FirebaseDatabase.instance
+        .ref('user_locations/$uid')
+        .get();
+
+    Map<String, dynamic>? currentLocation;
+    String? readableLocation;
+
+    if (locationSnapshot.exists) {
+      final locData = locationSnapshot.value as Map;
+      final double latitude = locData['latitude'];
+      final double longitude = locData['longitude'];
+
+      currentLocation = {
+        'latitude': latitude,
+        'longitude': longitude,
+        'timestamp': locData['timestamp'],
+      };
+
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(latitude, longitude);
+        if (placemarks.isNotEmpty) {
+          Placemark place = placemarks.first;
+          readableLocation = place.subLocality?.isNotEmpty == true
+              ? place.subLocality
+              : place.locality ?? '';
+
+              print(place.locality);
+        }
+      } catch (e) {
+        readableLocation = '';
+      }
+    }
 
     _userProfile = {
       ...data,
@@ -146,7 +188,9 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
       'trips': trips,
       'tripImages': tripImages,
       'tripNames': tripNames,
-      'photoCount': photoCount, // ✅ ADDED HERE
+      'photoCount': photoCount,
+      'currentLocation': currentLocation,
+      'location': readableLocation, // ✅ Added displayable name here
     };
 
     notifyListeners();
@@ -358,4 +402,32 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
       throw Exception('Failed to update setting: ${e.toString()}');
     }
   }
+
+ // Get the profile image URL for a given userId, with caching
+  Future<String?> getProfileImageById(String userId) async {
+    // Check if the image is already cached
+    if (_profileImageCache.containsKey(userId)) {
+      return _profileImageCache[userId];
+    }
+
+    try {
+      // Fetch from Firestore if not cached
+      final userSnapshot = await _firestore.collection('users').doc(userId).get();
+
+      if (userSnapshot.exists) {
+        final userData = userSnapshot.data() as Map<String, dynamic>;
+        String? profileImageUrl = userData['profileImage'];
+
+        // Cache the result
+        _profileImageCache[userId] = profileImageUrl;
+
+        return profileImageUrl; // Return the profile image URL or null if not found
+      } else {
+        throw Exception('User not found');
+      }
+    } catch (e) {
+      throw Exception('Failed to fetch profile image: ${e.toString()}');
+    }
+  }
+
 }

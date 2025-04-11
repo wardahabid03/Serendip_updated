@@ -206,8 +206,9 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
   Widget _buildPrivateProfile(Map<String, dynamic> profile) {
     return Center(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
+           const SizedBox(height:20),
           CircleAvatar(
             radius: 60,
             backgroundImage: profile['profileImage'] != null &&
@@ -275,6 +276,9 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             backgroundColor: status == 'received' ? Colors.green : Colors.blue,
             foregroundColor: Colors.white,
             disabledBackgroundColor: Colors.grey,
+              shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(12), // ⬅️ Adjust corner roundness here
+  ),
           ),
           child: Text(_getButtonText(status)), // Dynamic button text
         );
@@ -345,33 +349,47 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
 
           // Show Friend Action & Chat Button only if it's NOT the current user
           if (!_isCurrentUser) ...[
+            Row(
+
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+
+
+             
             _buildFriendActionButton(profile),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  '/chat', // Replace with the actual route name
-                  arguments: {
-                    'userId': profile['id'] ?? '', // Ensure it's not null
-                    'username':
-                        profile['username'] ?? 'Unknown', // Default username
-                    'profileImage': profile['profileImage'] ??
-                        '', // Handle null profile image
-                  },
-                );
-              },
-              // icon: const Icon(Icons.chat, size: 20),
-              label: const Text("Chat"),
-              style: ElevatedButton.styleFrom(
-                foregroundColor: Colors.white,
-                backgroundColor: tealSwatch,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30)),
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 100,
+              height: 40,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/chat', // Replace with the actual route name
+                    arguments: {
+                      'userId': profile['id'] ?? '', // Ensure it's not null
+                      'username':
+                          profile['username'] ?? 'Unknown', // Default username
+                      'profileImage': profile['profileImage'] ??
+                          '', // Handle null profile image
+                    },
+                  );
+                },
+                // icon: const Icon(Icons.chat, size: 20),
+                label: const Text("Chat"),
+                style: ElevatedButton.styleFrom(
+                  foregroundColor: tealColor,
+                  backgroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 0),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ),
+             ],
+            )
           ],
         ],
       ),
@@ -425,12 +443,15 @@ class _ViewProfileScreenState extends State<ViewProfileScreen> {
             ),
           );
         },
-        icon: const Icon(Icons.person_remove),
+        // icon: const Icon(Icons.person_remove),
+     
         label: const Text('Unfriend'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.redAccent,
+          backgroundColor: tealColor,
           foregroundColor: Colors.white,
-        ),
+          shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        ),)
       );
     }
     // Friend request already sent: show disabled Request Sent button

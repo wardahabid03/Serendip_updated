@@ -18,6 +18,7 @@ import 'dart:convert';
 import '../../../core/utils/navigator_key.dart';
 import '../../Map_view/Layers/trips_layer.dart';
 import '../../Map_view/controller/map_controller.dart';
+import '../../location/location_provider.dart';
 
 class TripProvider with ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -177,14 +178,25 @@ class TripProvider with ChangeNotifier {
     }
   }
 
-
-Future<void> captureImage(File imageFile, LatLng location, BuildContext context) async {
+Future<void> captureImage(File imageFile, BuildContext context) async {
   if (_currentTrip == null) {
     print("⚠️ No active trip to save the image.");
     return;
   }
 
   try {
+    // ✅ Get current location from LocationProvider
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final LatLng? location = locationProvider.currentLocation;
+
+    if (location == null) {
+      print("❌ Current location not available.");
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        const SnackBar(content: Text('Location not available. Try again.')),
+      );
+      return;
+    }
+
     final imageId = const Uuid().v4();
     final directory = await getApplicationDocumentsDirectory();
     final savedImagePath = '${directory.path}/$imageId.jpg';
@@ -200,7 +212,7 @@ Future<void> captureImage(File imageFile, LatLng location, BuildContext context)
     };
 
     _uploadQueue.add(uploadData);
-    _saveQueueToPrefs(); // persist if needed
+    _saveQueueToPrefs();
     _triggerQueueProcessing();
 
     scaffoldMessengerKey.currentState?.showSnackBar(
@@ -213,6 +225,7 @@ Future<void> captureImage(File imageFile, LatLng location, BuildContext context)
     );
   }
 }
+
 
 
 void _triggerQueueProcessing() {

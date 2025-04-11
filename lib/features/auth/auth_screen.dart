@@ -133,13 +133,25 @@ class _AuthScreenState extends State<AuthScreen> {
         await authProvider.signUp(email, password, context);
       }
 
-      if (authProvider.errorMessage != null) {
-        // Navigator.of(context).pushReplacementNamed(AppRoutes.map);
-        _showErrorDialog(
-          'Authentication Failed',
-          'Unable to authenticate. Please try again.',
-        );
-      }
+ if (authProvider.errorMessage != null) {
+  String message = authProvider.errorMessage!;
+  
+  if (message.contains('email-already-in-use')) {
+    message = 'Email already in use.';
+  } else if (message.contains('user-not-found')) {
+    message = 'User not found.';
+  } else if (message.contains('wrong-password')) {
+    message = 'Wrong password.';
+  } else if (message.contains('network-request-failed')) {
+    message = 'No internet connection.';
+  } else {
+    message = 'Something went wrong.';
+  }
+
+  _showErrorDialog('Error', message);
+}
+
+
     } catch (e) {
       _showErrorDialog(
         'Authentication Error',

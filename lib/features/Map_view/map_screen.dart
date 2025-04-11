@@ -30,6 +30,7 @@ import '../recomendation_system/widgets/place_details_bottom_sheet.dart';
 import '../recomendation_system/widgets/place_list.dart';
 import '../../core/utils/bottom_nav_bar.dart';
 import '../../core/utils/navigation_controller.dart';
+import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
 class MapScreen extends StatefulWidget {
   final TripModel? trip;
@@ -98,24 +99,22 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (_isRecordingTrip) {
       // Update UI to show active trip
       final mapController = Provider.of<MapController>(context, listen: false);
-      final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-      
-      if (tripProvider.currentTrip != null && locationProvider.currentLocation != null) {
+      final locationProvider =
+          Provider.of<LocationProvider>(context, listen: false);
+
+      if (tripProvider.currentTrip != null &&
+          locationProvider.currentLocation != null) {
         mapController.addTripPolyline(
-          tripProvider.currentTrip!.tripPath,
-          "active_trip"
-        );
+            tripProvider.currentTrip!.tripPath, "active_trip");
         mapController.addActiveTripCircle(locationProvider.currentLocation!);
       }
 
       // Show active trip notification
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Trip recording is active'),
-            duration: Duration(seconds: 3),
-          )
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Trip recording is active'),
+          duration: Duration(seconds: 3),
+        ));
       }
     }
   }
@@ -137,7 +136,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _getUserLocation() async {
-    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    final locationProvider =
+        Provider.of<LocationProvider>(context, listen: false);
     final mapController = Provider.of<MapController>(context, listen: false);
     setState(() {
       _userLocation = locationProvider.currentLocation ?? const LatLng(0, 0);
@@ -196,7 +196,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not move map to selected location. Please try again.'),
+          content: Text(
+              'Could not move map to selected location. Please try again.'),
           duration: Duration(seconds: 2),
         ),
       );
@@ -236,74 +237,70 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     });
   }
 
-void _toggleTripRecording() async {
-  final mapController = Provider.of<MapController>(context, listen: false);
-  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+  void _toggleTripRecording() async {
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final locationProvider =
+        Provider.of<LocationProvider>(context, listen: false);
 
-  if (_isRecordingTrip) {
-    await TripHelper.stopTrip(context);
-    setState(() => _isRecordingTrip = false);
+    if (_isRecordingTrip) {
+      await TripHelper.stopTrip(context);
+      setState(() => _isRecordingTrip = false);
 
-    // Smoothly reset camera when trip stops
-    mapController.moveCamera(
-      locationProvider.currentLocation ?? _userLocation,
-      zoom: 14,
-      tilt: 0,
-      bearing: 0,
-    );
-  } else {
-    bool tripStarted = await TripHelper.startTrip(context);
-
-    if (tripStarted) {
-      setState(() => _isRecordingTrip = true);
-
-      // Smoothly move camera to user’s location with immersive effect
+      // Smoothly reset camera when trip stops
       mapController.moveCamera(
         locationProvider.currentLocation ?? _userLocation,
-        zoom: 18,
-        tilt: 60,    // 3D effect for trip view
-        bearing: 30, // Slight angle for a dynamic view
+        zoom: 14,
+        tilt: 0,
+        bearing: 0,
       );
+    } else {
+      bool tripStarted = await TripHelper.startTrip(context);
+
+      if (tripStarted) {
+        setState(() => _isRecordingTrip = true);
+
+        // Smoothly move camera to user’s location with immersive effect
+        mapController.moveCamera(
+          locationProvider.currentLocation ?? _userLocation,
+          zoom: 16,
+          tilt: 60, // 3D effect for trip view
+          bearing: 30, // Slight angle for a dynamic view
+        );
+      }
     }
   }
-}
-
-
 
   Future<void> _captureAndUploadImage(BuildContext context) async {
     if (!_isRecordingTrip) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please start a trip before capturing images'))
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Please start a trip before capturing images')));
       return;
     }
 
     try {
       final ImagePicker picker = ImagePicker();
-      final XFile? pickedFile = await picker.pickImage(source: ImageSource.camera);
-      
+      final XFile? pickedFile =
+          await picker.pickImage(source: ImageSource.camera);
+
       if (pickedFile == null) return;
 
       File imageFile = File(pickedFile.path);
       final tripProvider = Provider.of<TripProvider>(context, listen: false);
-      
+
       if (tripProvider.isUploading) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please wait for the previous upload to complete'))
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Please wait for the previous upload to complete')));
         return;
       }
 
-      await tripProvider.captureImage(imageFile, _userLocation, context);
+      await tripProvider.captureImage(imageFile, context);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error capturing image: ${e.toString()}'))
-        );
+            SnackBar(content: Text('Error capturing image: ${e.toString()}')));
       }
     }
   }
-
 
   Future<void> _fetchAndDisplayTrips() async {
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
@@ -342,35 +339,63 @@ void _toggleTripRecording() async {
   void _showTripFilters() {
     showModalBottomSheet(
       context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      isScrollControlled: true,
       builder: (context) {
+        // local variable inside the builder
+        List<String> selectedFilters = [];
+
         return StatefulBuilder(
           builder: (context, setStateSheet) {
             return Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+                top: 24,
+                left: 16,
+                right: 16,
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    "Filter Trips",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                    "Select Trip Filters",
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildFilterOption("My Trips", setStateSheet),
-                      _buildFilterOption("Friends' Trips", setStateSheet),
-                      _buildFilterOption("Collaborated Trips", setStateSheet),
-                    ],
+                  const SizedBox(height: 20),
+
+                  // Filter Cards
+                  _buildFilterCard(
+                      "My Trips", Icons.person, selectedFilters, setStateSheet),
+                  const SizedBox(height: 12),
+                  _buildFilterCard("Friends' Trips", Icons.group,
+                      selectedFilters, setStateSheet),
+                  const SizedBox(height: 12),
+                  _buildFilterCard("Collaborated Trips", Icons.people_alt,
+                      selectedFilters, setStateSheet),
+
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.of(context).pop();
+                        // You can pass selectedFilters somewhere if needed
+                        await _fetchAndDisplayTrips();
+                      },
+                      icon: const Icon(Icons.check),
+                      label: const Text("Apply Filters"),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        textStyle: const TextStyle(fontSize: 16),
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 10),
-                  ElevatedButton(
-                    onPressed: () async {
-                      Navigator.of(context).pop();
-                      await _fetchAndDisplayTrips();
-                    },
-                    child: const Text("Apply Filter"),
-                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
             );
@@ -380,71 +405,212 @@ void _toggleTripRecording() async {
     );
   }
 
-  Widget _buildFilterOption(String option, void Function(void Function()) setStateSheet) {
-    bool isSelected = _selectedTripFilter == option;
-    return OutlinedButton(
-      onPressed: () {
+  Widget _buildFilterCard(
+    String title,
+    IconData icon,
+    List<String> selectedFilters,
+    void Function(void Function()) setStateSheet,
+  ) {
+    final isSelected = selectedFilters.contains(title);
+
+    return InkWell(
+      onTap: () {
         setStateSheet(() {
-          _selectedTripFilter = option;
+          if (isSelected) {
+            selectedFilters.remove(title);
+          } else {
+            selectedFilters.add(title);
+          }
         });
       },
-      style: OutlinedButton.styleFrom(
-        backgroundColor: isSelected ? Colors.greenAccent : Colors.white,
-      ),
-      child: Text(
-        option,
-        style: TextStyle(color: isSelected ? Colors.white : Colors.black)
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color:
+              isSelected ? tealColor.withOpacity(0.01) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? tealColor : Colors.grey.shade300,
+            width: 1.5,
+          ),
+          boxShadow: [
+            if (isSelected)
+              BoxShadow(
+                color: tealColor.withOpacity(0.2),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? tealColor : Colors.grey),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                title,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: isSelected ? tealColor : Colors.black87,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ),
+            Icon(
+              isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
+              color: isSelected ? tealColor : Colors.grey,
+            )
+          ],
+        ),
       ),
     );
   }
 
- void _handleLongPress(LatLng position, BuildContext context) async {
-  // Reverse geocode the LatLng to get the place name
-  List<Placemark> placemarks = await placemarkFromCoordinates(position.latitude, position.longitude);
-  String placeName = placemarks.isNotEmpty ? placemarks.first.name ?? "Unknown Place" : "Unknown Place";
+  void _handleLongPress(LatLng position, BuildContext context) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
 
-  _showAddReviewDialog(context, position, placeName);
-}
+      String placeName = "Unknown Place";
 
-void _showAddReviewDialog(BuildContext context, LatLng position, String placeName) {
-  final TextEditingController reviewController = TextEditingController();
-  final reviewProvider = Provider.of<ReviewProvider>(context, listen: false);
+      if (placemarks.isNotEmpty) {
+        final Placemark place = placemarks.first;
+        placeName = (place.subLocality != null && place.subLocality!.isNotEmpty)
+            ? place.subLocality!
+            : (place.locality != null && place.locality!.isNotEmpty)
+                ? place.locality!
+                : "Unknown Place";
 
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: Text("Add Review"),
-      content: TextField(
-        controller: reviewController,
-        maxLines: 3,
-        decoration: InputDecoration(hintText: "Write your review here..."),
-      ),
-      actions: [
-        TextButton(
-          child: Text("Cancel"),
-          onPressed: () => Navigator.pop(context),
-        ),
-        TextButton(
-          child: Text("Submit"),
-          onPressed: () async {
-            if (reviewController.text.isNotEmpty) {
-              String reviewId = '${position.latitude},${position.longitude}'; // Use LatLng as review ID
-              await reviewProvider.addReview(reviewId, placeName, reviewController.text,context);
-            }
-            Navigator.pop(context);
-          },
-        ),
-      ],
-    ),
-  );
-}
+        print(";-----------------------------------");
+        print("Name: ${place.name}");
+        print("Admin Area: ${place.administrativeArea}");
+        print("Locality: ${place.locality}");
+        print("Street: ${place.street}");
+        print("SubLocality: ${place.subLocality}");
+        print("Thoroughfare: ${place.thoroughfare}");
+        print("SubThoroughfare: ${place.subThoroughfare}");
+      }
 
+      _showAddReviewDialog(context, position, placeName);
+    } catch (e) {
+      print("❌ Error during reverse geocoding: $e");
+      _showAddReviewDialog(context, position, "Unknown Place");
+    }
+  }
 
-  
+  void _showAddReviewDialog(
+      BuildContext context, LatLng position, String placeName) {
+    final TextEditingController reviewController = TextEditingController();
+    final reviewProvider = Provider.of<ReviewProvider>(context, listen: false);
+    double selectedRating = 0.0;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(
+            "Add Review",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Rate th area",
+              ),
+              SizedBox(height: 8),
+              RatingBar.builder(
+                initialRating: selectedRating,
+                minRating: 1,
+                direction: Axis.horizontal,
+                allowHalfRating: true,
+                itemCount: 5,
+                unratedColor: Colors.grey.shade300,
+                itemPadding: EdgeInsets.symmetric(horizontal: 2.0),
+                itemBuilder: (context, _) => Icon(
+                  Icons.star_rounded,
+                  color: Colors.amber,
+                ),
+                onRatingUpdate: (rating) {
+                  selectedRating = rating;
+                },
+              ),
+              SizedBox(height: 20),
+              TextField(
+                controller: reviewController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: "Write your review here...",
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: tealColor,
+                      side: BorderSide(color: tealColor),
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text("Cancel"),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ),
+                SizedBox(width: 12), // spacing between buttons
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: tealColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text("Submit"),
+                    onPressed: () async {
+                      if (reviewController.text.trim().isNotEmpty) {
+                        String reviewId =
+                            '${position.latitude},${position.longitude}';
+                        await reviewProvider.addReview(
+                          reviewId,
+                          placeName,
+                          reviewController.text.trim(),
+                          selectedRating,
+                          context,
+                        );
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-   final reviewProvider = Provider.of<ReviewProvider>(context);
+    final reviewProvider = Provider.of<ReviewProvider>(context);
     return Scaffold(
       backgroundColor: eggShellColor,
       resizeToAvoidBottomInset: false,
@@ -463,7 +629,8 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => FriendRequestPage()),
+                        MaterialPageRoute(
+                            builder: (context) => FriendRequestPage()),
                       );
                     },
                   ),
@@ -477,10 +644,9 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
                         child: Text(
                           unreadRequests.toString(),
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold
-                          ),
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -490,7 +656,8 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
           ),
           Consumer<ChatProvider>(
             builder: (context, chatProvider, child) {
-              int totalUnread = chatProvider.unreadCounts.values.fold(0, (a, b) => a + b);
+              int totalUnread =
+                  chatProvider.unreadCounts.values.fold(0, (a, b) => a + b);
               return Stack(
                 children: [
                   IconButton(
@@ -502,7 +669,8 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => ContactsScreen()),
+                        MaterialPageRoute(
+                            builder: (context) => ContactsScreen()),
                       );
                     },
                   ),
@@ -516,10 +684,9 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
                         child: Text(
                           totalUnread.toString(),
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold
-                          ),
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold),
                         ),
                       ),
                     ),
@@ -557,7 +724,8 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
                 ),
               Expanded(
                 child: SharedMapWidget(
-                  onLongPress: (LatLng position) => _handleLongPress(position, context),
+                  onLongPress: (LatLng position) =>
+                      _handleLongPress(position, context),
                   initialPosition: _userLocation,
                   initialZoom: 12,
                 ),
@@ -569,7 +737,8 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
               top: 100,
               left: 20,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.8),
                   borderRadius: BorderRadius.circular(20),
@@ -577,11 +746,13 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.fiber_manual_record, color: Colors.white, size: 12),
+                    Icon(Icons.fiber_manual_record,
+                        color: Colors.white, size: 12),
                     SizedBox(width: 8),
                     Text(
                       'Recording Trip',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -604,11 +775,9 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
             child: FloatingActionButton(
               heroTag: 'fab_1',
               onPressed: _toggleTripRecording,
-              backgroundColor: _isRecordingTrip ? Colors.red : Colors.green,
-              child: Icon(
-                _isRecordingTrip ? Icons.stop : Icons.play_arrow,
-                color: Colors.white
-              ),
+              backgroundColor: tealColor,
+              child: Icon(_isRecordingTrip ? Icons.stop : Icons.play_arrow,
+                  color: Colors.white),
               tooltip: _isRecordingTrip ? 'Stop Trip' : 'Start Trip',
             ),
           ),
@@ -654,7 +823,8 @@ void _showAddReviewDialog(BuildContext context, LatLng position, String placeNam
               category3: _selectedPlaceCategory3,
               onDragUpdate: (delta) {
                 setState(() {
-                  _containerHeight -= delta / MediaQuery.of(context).size.height;
+                  _containerHeight -=
+                      delta / MediaQuery.of(context).size.height;
                   _containerHeight = _containerHeight.clamp(0.1, 0.5);
                 });
               },
