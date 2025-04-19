@@ -33,7 +33,9 @@ class ReviewModel {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? 'Anonymous',
       rating: (data['rating'] ?? 0.0).toDouble(),
-      totalRatings: data['totalRatings'] ?? 0,
+      totalRatings: data['totalRatings'] is int
+          ? data['totalRatings']
+          : int.tryParse(data['totalRatings'].toString()) ?? 0,
     );
   }
 

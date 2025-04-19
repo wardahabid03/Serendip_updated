@@ -22,7 +22,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadReviewVisibility();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+      final profileProvider =
+          Provider.of<ProfileProvider>(context, listen: false);
       profileProvider.fetchUserProfile().then((_) {
         final profile = profileProvider.userProfile;
         if (profile != null) {
@@ -59,7 +60,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
 
     // Fire off background update to Firebase
-    final profileProvider = Provider.of<ProfileProvider>(context, listen: false);
+    final profileProvider =
+        Provider.of<ProfileProvider>(context, listen: false);
     profileProvider.updateSetting(key, value);
   }
 
@@ -77,7 +79,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Confirm Logout'),
         content: const Text('Are you sure you want to log out?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           TextButton(
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Logout', style: TextStyle(color: Colors.red))),
@@ -89,11 +93,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         await Provider.of<AuthProvider>(context, listen: false).logout();
         if (!mounted) return;
-        Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+        Navigator.of(context)
+            .pushNamedAndRemoveUntil('/auth', (route) => false);
       } catch (e) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout failed: ${e.toString()}'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Logout failed: ${e.toString()}'),
+              backgroundColor: Colors.red),
         );
       }
     }
@@ -112,12 +119,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSection('Account', [
-                    _buildSettingsTile('Email', profile['email'] ?? 'Not set', icon: Icons.email),
+                    _buildSettingsTile('Email', profile['email'] ?? 'Not set',
+                        icon: Icons.email),
                     _buildSettingsTile(
                       'Change Password',
                       'Update your password',
                       icon: Icons.lock,
-                      onTap: () => Navigator.pushNamed(context, '/change-password'),
+                      onTap: () =>
+                          Navigator.pushNamed(context, '/change-password'),
                     ),
                   ]),
                   _buildSection('Privacy', [
@@ -131,7 +140,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'Show Location',
                       _localToggles['locationEnabled'] ?? false,
                       icon: Icons.location_on,
-                      onChanged: (value) => _toggleSetting('locationEnabled', value),
+                      onChanged: (value) =>
+                          _toggleSetting('locationEnabled', value),
                     ),
                     _buildSwitchTile(
                       'Show Trip History',
@@ -151,13 +161,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'Friend Requests',
                       _localToggles['notifyFriendRequests'] ?? true,
                       icon: Icons.person_add,
-                      onChanged: (value) => _toggleSetting('notifyFriendRequests', value),
+                      onChanged: (value) =>
+                          _toggleSetting('notifyFriendRequests', value),
                     ),
                     _buildSwitchTile(
                       'Trip Updates',
                       _localToggles['notifyTripUpdates'] ?? true,
                       icon: Icons.notifications,
-                      onChanged: (value) => _toggleSetting('notifyTripUpdates', value),
+                      onChanged: (value) =>
+                          _toggleSetting('notifyTripUpdates', value),
+                    ),
+                  ]),
+                  _buildSection('Business', [
+                    _buildSettingsTile(
+                      'Represent Your Business',
+                      'Submit an ad & call to action',
+                      icon: Icons.business_center,
+                      onTap: () {
+                        Navigator.pushNamed(context, '/make_ad');
+                      },
                     ),
                   ]),
                   _buildSection('Data & Storage', [
@@ -167,7 +189,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.cleaning_services,
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Cache cleared'), backgroundColor: Colors.green),
+                          const SnackBar(
+                              content: Text('Cache cleared'),
+                              backgroundColor: Colors.green),
                         );
                       },
                     ),
@@ -177,7 +201,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.download,
                       onTap: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Download started'), backgroundColor: Colors.blue),
+                          const SnackBar(
+                              content: Text('Download started'),
+                              backgroundColor: Colors.blue),
                         );
                       },
                     ),
@@ -196,7 +222,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                      child: const Text('Log Out', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      child: const Text('Log Out',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
@@ -211,7 +239,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
+          child: Text(title,
+              style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87)),
         ),
         ...children,
         const Divider(height: 1),
@@ -219,7 +251,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSettingsTile(String title, String subtitle, {required IconData icon, VoidCallback? onTap}) {
+  Widget _buildSettingsTile(String title, String subtitle,
+      {required IconData icon, VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon, color: tealSwatch),
       title: Text(title),
@@ -229,7 +262,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSwitchTile(String title, bool value, {required IconData icon, required ValueChanged<bool> onChanged}) {
+  Widget _buildSwitchTile(String title, bool value,
+      {required IconData icon, required ValueChanged<bool> onChanged}) {
     return SwitchListTile(
       secondary: Icon(icon, color: tealSwatch),
       title: Text(title),

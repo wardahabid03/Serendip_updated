@@ -56,6 +56,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   static const String PLACES_LAYER = 'places_layer';
   static const String TRIPS_LAYER = 'trips_layer';
   static const String REVIEWS_LAYER = 'reviews_layer';
+    static const String FRIENDS_LAYER = 'friends_layer';
   int _selectedIndex = 0;
   String _selectedTripFilter = "My Trips";
 
@@ -133,6 +134,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     mapController.addLayer(TRIPS_LAYER, TripsLayer());
     mapController.toggleLayer(TRIPS_LAYER, true);
     mapController.toggleLayer(REVIEWS_LAYER, true);
+     mapController.toggleLayer(FRIENDS_LAYER, false);
   }
 
   Future<void> _getUserLocation() async {
@@ -230,7 +232,9 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
 
   void _clearMap() {
     final mapController = Provider.of<MapController>(context, listen: false);
-    mapController.clearAllLayers();
+    mapController.clearLayer(PLACES_LAYER);
+    mapController.clearLayer(TRIPS_LAYER);
+   
     setState(() {
       _isPlaceSelected = false;
       _places.clear();
@@ -501,7 +505,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     }
   }
 
-  void _showAddReviewDialog(
+void _showAddReviewDialog(
       BuildContext context, LatLng position, String placeName) {
     final TextEditingController reviewController = TextEditingController();
     final reviewProvider = Provider.of<ReviewProvider>(context, listen: false);
@@ -522,7 +526,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "Rate th area",
+                "Rate the area",
               ),
               SizedBox(height: 8),
               RatingBar.builder(
@@ -588,6 +592,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                       if (reviewController.text.trim().isNotEmpty) {
                         String reviewId =
                             '${position.latitude},${position.longitude}';
+                            print('adding review');
+                                FocusScope.of(context).unfocus();
                         await reviewProvider.addReview(
                           reviewId,
                           placeName,
@@ -595,6 +601,7 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
                           selectedRating,
                           context,
                         );
+                        print('Review loaded');
                         Navigator.pop(context);
                       }
                     },
@@ -607,6 +614,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       },
     );
   }
+
+
 
   @override
   Widget build(BuildContext context) {

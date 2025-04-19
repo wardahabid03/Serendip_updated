@@ -2,7 +2,9 @@
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:provider/provider.dart';
+import 'package:serendip/features/Ads/ads_provider.dart';
 import 'package:serendip/features/Reviews/review_provider.dart';
 import 'package:serendip/features/chat/chat_provider.dart';
 import 'package:serendip/features/location/location_provider.dart';
@@ -27,6 +29,9 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  Stripe.publishableKey = 'pk_test_51OKjZAHjNC2EIx6F7VG5nnoHEpT7gWgmHvWHvdN3T62A4rzy6DlLanRlWJfegBVNr3f6ke5LtUZXmC8EBeHTQc3400RmGeF6Bd'; // <-- Your test key here
+  await Stripe.instance.applySettings();
+  
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -69,6 +74,9 @@ class MyApp extends StatelessWidget {
         // Feature providers
         ChangeNotifierProvider<FriendRequestProvider>(
           create: (_) => FriendRequestProvider(),
+        ),
+         ChangeNotifierProvider<BusinessAdsProvider>(
+          create: (_) => BusinessAdsProvider(),
         ),
         ChangeNotifierProvider<LocationProvider>(
           create: (_) => LocationProvider(),

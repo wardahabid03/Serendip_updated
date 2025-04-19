@@ -1,5 +1,6 @@
 // lib/routes/app_routes.dart
 import 'package:flutter/material.dart';
+import 'package:serendip/features/Ads/ad_making_screen.dart';
 import 'package:serendip/features/Auth/auth_screen.dart';
 import 'package:serendip/features/Social_Media/find_friends/search_friends_page.dart';
 import 'package:serendip/features/Social_Media/friend_request/friend_request_screen.dart';
@@ -32,6 +33,7 @@ class AppRoutes {
   static const String settingsscreen = '/settingsscreen';
   static const String view_requests = '/view_requests';
   static const String chat = '/chat';
+  static const String make_ad = '/make_ad';
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -65,6 +67,8 @@ class AppRoutes {
         return MaterialPageRoute(builder: (_) => FriendRequestPage());
       case edit_profile:
         return MaterialPageRoute(builder: (_) => EditProfileScreen());
+      case make_ad:
+        return MaterialPageRoute(builder: (_) => BusinessAdScreen());
 
       case view_profile:
         return MaterialPageRoute(

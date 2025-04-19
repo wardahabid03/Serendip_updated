@@ -1,0 +1,9 @@
+{
+  "projects": {
+    "default": "fast-kiln-434404-m1",
+    "serendip": "serendip-fd062",
+    "stripe": "fast-kiln-434404-m1"
+  },
+  "targets": {},
+  "etags": {}
+}
