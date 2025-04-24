@@ -11,37 +11,88 @@ class BusinessAdsProvider with ChangeNotifier {
 
   List<BusinessAd> get ads => _ads;
 
-  Future<void> fetchAds({GeoPoint? userLocation}) async {
-    final snapshot = await _adsRef
-        .where('isPaymentActive', isEqualTo: true)
-        .orderBy('createdAt', descending: true)
-        .get();
+Future<void> fetchAds({GeoPoint? userLocation}) async {
+  print("Fetching ads from Firestore...");
+  final snapshot = await _adsRef
+      .where('isPaymentActive', isEqualTo: true)
+      .orderBy('createdAt', descending: true)
+      .get();
 
-    _ads = snapshot.docs.map((doc) {
-      final ad = BusinessAd.fromDoc(doc);
-      if (userLocation != null) {
-        final distance = _calculateDistance(
-          userLocation.latitude,
-          userLocation.longitude,
-          ad.location.latitude,
-          ad.location.longitude,
-        );
-        return ad.copyWith(distance: distance);
-      }
-      return ad;
-    }).toList();
+  print("Found ${snapshot.docs.length} active ads.");
+
+  _ads = snapshot.docs.map((doc) {
+    final ad = BusinessAd.fromDoc(doc);
+    print("Ad fetched: ${ad.title}");
 
     if (userLocation != null) {
-      _ads.sort((a, b) => (a.distance ?? 0).compareTo(b.distance ?? 0));
+      final distance = _calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        ad.location.latitude,
+        ad.location.longitude,
+      );
+      print("Distance to ad '${ad.title}': ${distance.toStringAsFixed(2)} km");
+      return ad.copyWith(distance: distance);
     }
 
-    notifyListeners();
+    return ad;
+  }).toList();
+
+  if (userLocation != null) {
+    print("Sorting ads by distance...");
+    _ads.sort((a, b) => (a.distance ?? 0).compareTo(b.distance ?? 0));
   }
+
+  print("Ads ready. Notifying listeners.");
+  notifyListeners();
+}
+
 
   Future<void> addAd(BusinessAd ad) async {
     final doc = _adsRef.doc();
     await doc.set(ad.toMap());
   }
+
+
+Future<void> updateUserAdPaymentStatus({
+  required String userId, // for searching, not doc id
+  required String paymentPlan,
+  required DateTime adStartDate,
+  required DateTime adEndDate,
+}) async {
+  final query = await _adsRef.where('ownerId', isEqualTo: userId).limit(1).get();
+
+  if (query.docs.isEmpty) {
+    throw Exception('Ad not found for user: $userId');
+  }
+
+  final docId = query.docs.first.id;
+
+  final adData = {
+    'isPaymentActive': true,
+    'paymentPlan': paymentPlan,
+    'adStartDate': adStartDate,
+    'adEndDate': adEndDate,
+  };
+
+  await _adsRef.doc(docId).set(adData, SetOptions(merge: true));
+}
+
+Future<void> incrementImpression(String adId) async {
+  final docRef = _adsRef.doc(adId);
+  await docRef.update({
+    'impressionCount': FieldValue.increment(1),
+  });
+}
+
+Future<void> incrementCtaClick(String adId) async {
+  final docRef = _adsRef.doc(adId);
+  await docRef.update({
+    'ctaClickCount': FieldValue.increment(1),
+  });
+}
+
+
 
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
     const R = 6371; // km

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
@@ -18,6 +19,7 @@ import 'package:serendip/features/recomendation_system/widgets/search_bar.dart';
 import 'package:serendip/features/Trip_Tracking/provider/trip_provider.dart';
 import 'package:serendip/features/Trip_Tracking/trip_helper.dart';
 import 'package:serendip/features/location/location_provider.dart';
+import 'package:serendip/models/ads_model.dart';
 import 'package:serendip/models/trip_model.dart';
 import '../../models/places.dart';
 import '../../services/api_service.dart';
@@ -32,9 +34,12 @@ import '../../core/utils/bottom_nav_bar.dart';
 import '../../core/utils/navigation_controller.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 
+import 'Layers/ad_layer.dart';
+
 class MapScreen extends StatefulWidget {
   final TripModel? trip;
-  const MapScreen({Key? key, this.trip}) : super(key: key);
+    final LatLng? adLocation; // Add this parameter
+  const MapScreen({Key? key, this.trip,this.adLocation}) : super(key: key);
   @override
   _MapScreenState createState() => _MapScreenState();
 }
@@ -60,23 +65,78 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   String _selectedTripFilter = "My Trips";
 
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeLayers();
-      _checkActiveTrip();
-    });
-    _getUserLocation();
-    Provider.of<ChatProvider>(context, listen: false).listenForUnreadMessages();
+ static const String ADS_LAYER = 'ads_layer';
 
-    if (widget.trip != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _displayTrip(widget.trip!);
-      });
+@override
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addObserver(this);
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _initializeLayers();
+    _checkActiveTrip();
+    if (widget.adLocation != null) {
+      _setupAdRoute();
     }
+  });
+  _getUserLocation();
+  Provider.of<ChatProvider>(context, listen: false).listenForUnreadMessages();
+
+  if (widget.trip != null) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _displayTrip(widget.trip!);
+    });
   }
+}
+
+void _setupAdRoute() async {
+  final mapController = Provider.of<MapController>(context, listen: false);
+  final adLayer = mapController.getLayer(ADS_LAYER) as AdLayer;
+  
+  // Set user location
+  adLayer.setUserLocation(_userLocation);
+  
+  // Add ad marker and draw route
+  await adLayer.setAds([
+    BusinessAd(
+      id: 'target-ad',
+      location: GeoPoint(
+        widget.adLocation!.latitude,
+        widget.adLocation!.longitude,
+      ),
+      imageUrl: 'https://via.placeholder.com/50', // Default marker image
+      title: 'Destination',
+      description: 'Your selected destination',
+    ),
+  ]);
+
+  // Move camera to show both points
+  final bounds = LatLngBounds(
+    southwest: LatLng(
+      min(_userLocation.latitude, widget.adLocation!.latitude),
+      min(_userLocation.longitude, widget.adLocation!.longitude),
+    ),
+    northeast: LatLng(
+      max(_userLocation.latitude, widget.adLocation!.latitude),
+      max(_userLocation.longitude, widget.adLocation!.longitude),
+    ),
+  );
+
+  mapController.controller?.animateCamera(
+    CameraUpdate.newLatLngBounds(bounds, 100),
+  );
+}
+
+// void _initializeLayers() {
+//   final mapController = Provider.of<MapController>(context, listen: false);
+//   mapController.addLayer(PLACES_LAYER, PlacesLayer());
+//   mapController.addLayer(TRIPS_LAYER, TripsLayer());
+//   mapController.addLayer(ADS_LAYER, AdLayer());
+  
+//   mapController.toggleLayer(PLACES_LAYER, true);
+//   mapController.toggleLayer(TRIPS_LAYER, true);
+//   mapController.toggleLayer(ADS_LAYER, true);
+// }
+
 
   @override
   void dispose() {
@@ -90,6 +150,27 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       _checkActiveTrip();
     }
   }
+
+
+  Widget _styledFab({
+  required IconData icon,
+  required String tooltip,
+  required VoidCallback onPressed,
+  required String heroTag,
+}) {
+  return FloatingActionButton.small(
+    heroTag: heroTag,
+    onPressed: onPressed,
+    backgroundColor: tealColor,
+    tooltip: tooltip,
+    // shape: RoundedRectangleBorder(
+    //   borderRadius: BorderRadius.circular(16),
+    //   side: BorderSide(color: tealColor, width: 2),
+    // ),
+    child: Icon(icon, color: Colors.white,size: 20,),
+  );
+}
+
 
   Future<void> _checkActiveTrip() async {
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
@@ -127,15 +208,30 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     NavigationController.navigateToScreen(context, index);
   }
 
-  void _initializeLayers() {
-    final mapController = Provider.of<MapController>(context, listen: false);
-    mapController.addLayer(PLACES_LAYER, PlacesLayer());
-    mapController.toggleLayer(PLACES_LAYER, true);
-    mapController.addLayer(TRIPS_LAYER, TripsLayer());
-    mapController.toggleLayer(TRIPS_LAYER, true);
-    mapController.toggleLayer(REVIEWS_LAYER, true);
-     mapController.toggleLayer(FRIENDS_LAYER, false);
-  }
+void _initializeLayers() {
+  final mapController = Provider.of<MapController>(context, listen: false);
+  
+  // Places Layer
+  mapController.addLayer(PLACES_LAYER, PlacesLayer());
+  mapController.toggleLayer(PLACES_LAYER, true);
+  
+  // Trips Layer
+  mapController.addLayer(TRIPS_LAYER, TripsLayer());
+  mapController.toggleLayer(TRIPS_LAYER, true);
+  
+  // Reviews Layer
+  // mapController.addLayer(REVIEWS_LAYER, ReviewsLayer());
+  mapController.toggleLayer(REVIEWS_LAYER, true);
+  
+  // Friends Layer
+  // mapController.addLayer(FRIENDS_LAYER, FriendsLayer());
+  mapController.toggleLayer(FRIENDS_LAYER, false);
+  
+  // Ads Layer
+  // mapController.addLayer(ADS_LAYER, AdLayer());
+  mapController.toggleLayer(ADS_LAYER, true);
+}
+
 
   Future<void> _getUserLocation() async {
     final locationProvider =
@@ -305,6 +401,8 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
       }
     }
   }
+
+
 
   Future<void> _fetchAndDisplayTrips() async {
     final tripProvider = Provider.of<TripProvider>(context, listen: false);
@@ -767,32 +865,41 @@ void _showAddReviewDialog(
                 ),
               ),
             ),
-          Positioned(
-            bottom: 210,
-            right: 10,
-            child: FloatingActionButton(
-              heroTag: 'fab_4',
-              onPressed: () => _captureAndUploadImage(context),
-              backgroundColor: tealColor,
-              child: const Icon(Icons.camera_alt, color: Colors.white),
-              tooltip: 'Capture Image',
-            ),
-          ),
-          Positioned(
-            bottom: 90,
-            right: 10,
-            child: FloatingActionButton(
-              heroTag: 'fab_1',
-              onPressed: _toggleTripRecording,
-              backgroundColor: tealColor,
-              child: Icon(_isRecordingTrip ? Icons.stop : Icons.play_arrow,
-                  color: Colors.white),
-              tooltip: _isRecordingTrip ? 'Stop Trip' : 'Start Trip',
-            ),
-          ),
+        Positioned(
+  bottom: 120,
+  right: 10,
+  child: Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+
+      if ( _isRecordingTrip)
+      _styledFab(
+        icon: Icons.camera_alt,
+        tooltip: 'Capture Image',
+        onPressed: () => _captureAndUploadImage(context),
+        heroTag: 'fab_4',
+      ),
+      const SizedBox(height: 6),
+      _styledFab(
+        icon: _isRecordingTrip ? Icons.stop : Icons.play_arrow,
+        tooltip: _isRecordingTrip ? 'Stop Trip' : 'Start Trip',
+        onPressed: _toggleTripRecording,
+        heroTag: 'fab_1',
+      ),
+      const SizedBox(height: 6),
+      _styledFab(
+        icon: Icons.filter_list,
+        tooltip: 'Filter Trips',
+        onPressed: _showTripFilters,
+        heroTag: 'fab_3',
+      ),
+    ],
+  ),
+),
+
           Positioned(
             top: 150,
-            right: 10,
+            left: 15,
             child: FloatingActionButton.small(
               heroTag: 'fab_2',
               onPressed: _clearMap,
@@ -801,17 +908,7 @@ void _showAddReviewDialog(
               tooltip: 'Clear map',
             ),
           ),
-          Positioned(
-            bottom: 150,
-            right: 10,
-            child: FloatingActionButton(
-              heroTag: 'fab_3',
-              onPressed: _showTripFilters,
-              backgroundColor: tealColor,
-              child: const Icon(Icons.filter_list, color: Colors.white),
-              tooltip: 'Filter Trips',
-            ),
-          ),
+          
           Positioned(
             bottom: 0,
             left: 0,

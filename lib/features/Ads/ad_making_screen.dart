@@ -172,39 +172,48 @@ Navigator.push(context, MaterialPageRoute(builder: (_) => PaymentScreen()));
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
               ),
-              const SizedBox(height: 10),
-           GestureDetector(
+   const SizedBox(height: 10),
+GestureDetector(
   onTap: _pickImage,
-  child: AnimatedContainer(
-    duration: const Duration(milliseconds: 200),
-    height: 180,
-    decoration: BoxDecoration(
-      border: Border.all(color: Colors.grey),
-      borderRadius: BorderRadius.circular(12),
-      color: imageFile == null ? Colors.grey[200] : Colors.transparent,
-      image: imageFile != null
-          ? DecorationImage(image: FileImage(imageFile!), fit: BoxFit.cover)
-          : null,
-      boxShadow: imageFile != null
-          ? [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ]
-          : [],
-    ),
-    child: imageFile == null
-        ? const Center(
-            child: Text(
-              'Tap to upload (800x600)',
-              style: TextStyle(color: Colors.grey),
-            ),
-          )
-        : null,
+  child: LayoutBuilder(
+    builder: (context, constraints) {
+      double width = constraints.maxWidth;
+      double height = width * 3 / 4; // 4:3 aspect ratio
+
+      return AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey),
+          borderRadius: BorderRadius.circular(12),
+          color: imageFile == null ? Colors.grey[200] : Colors.transparent,
+          image: imageFile != null
+              ? DecorationImage(image: FileImage(imageFile!), fit: BoxFit.cover)
+              : null,
+          boxShadow: imageFile != null
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ]
+              : [],
+        ),
+        child: imageFile == null
+            ? const Center(
+                child: Text(
+                  'Tap to upload (800x600)',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              )
+            : null,
+      );
+    },
   ),
 ),
+
 
               const SizedBox(height: 30),
               isLoading

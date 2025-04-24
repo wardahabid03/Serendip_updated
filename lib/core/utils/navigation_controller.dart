@@ -11,7 +11,7 @@ class NavigationController {
         route = "/find_friends";
         break;
       case 2:
-        route = "/view_requests";
+        route = "/display_ad";
         break;
       case 3:
         route = "/view_profile";

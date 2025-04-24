@@ -36,7 +36,7 @@ class CustomBottomNavBar extends StatelessWidget {
           ClipRRect(
             borderRadius: BorderRadius.circular(30),
             child: BottomAppBar(
-              color: Colors.teal,
+              color: tealColor,
               elevation: 10,
               shape: const CircularNotchedRectangle(),
               child: Row(
@@ -101,9 +101,9 @@ class CustomBottomNavBar extends StatelessWidget {
       case 0:
         return Icons.home_sharp;
       case 1:
-        return Icons.search;
+        return Icons.person_search;
       case 2:
-        return Icons.notifications;
+        return Icons.campaign_rounded;
       case 3:
         return Icons.person;
       default:

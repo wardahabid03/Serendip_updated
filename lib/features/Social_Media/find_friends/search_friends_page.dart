@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:serendip/core/constant/colors.dart';
 import 'package:serendip/features/Map_view/Layers/friends_layer.dart';
 import 'package:serendip/features/Map_view/controller/map_controller.dart';
 import 'package:serendip/features/Social_Media/find_friends/search_friends.dart';
@@ -97,10 +98,9 @@ class _FindFriendsPageState extends State<FindFriendsPage> {
   }
 
   Future<void> _findNearbyUsers() async {
-    if (currentUserLocation != null) {
-      List<UserModel> users = await userRepository.findNearbyUsers(currentUserLocation!, 5.0);
-      _updateUsersOnMap(users);
-    }
+    // 🔄 Modified: Fetch all users instead of filtering by distance
+    List<UserModel> users = await userRepository.getAllUsers();
+    _updateUsersOnMap(users);
   }
 
   void _updateUsersOnMap(List<UserModel> users) {
@@ -108,12 +108,10 @@ class _FindFriendsPageState extends State<FindFriendsPage> {
       nearbyUsers = users;
     });
 
- // Update the FriendsLayer markers
-final mapController = Provider.of<MapController>(context, listen: false);
-final friendsLayer = mapController.getLayer(FRIENDS_LAYER) as FriendsLayer?;
-friendsLayer?.updateFriendLocations(context, nearbyUsers);
-
-
+    // Update the FriendsLayer markers
+    final mapController = Provider.of<MapController>(context, listen: false);
+    final friendsLayer = mapController.getLayer(FRIENDS_LAYER) as FriendsLayer?;
+    friendsLayer?.updateFriendLocations(context, nearbyUsers);
   }
 
   void _viewUserProfile(UserModel user) {
@@ -185,10 +183,13 @@ friendsLayer?.updateFriendLocations(context, nearbyUsers);
           ),
 
           Positioned(
-            bottom: 120,
-            right: 20,
-            child: FloatingActionButton(
-              child: const Icon(Icons.refresh),
+            top: 120,
+            left: 20,
+            child: FloatingActionButton.small(
+              backgroundColor: tealColor,
+              foregroundColor: Colors.white,
+              tooltip: 'Show all users on map',
+              child: const Icon(Icons.travel_explore),
               onPressed: _findNearbyUsers,
             ),
           ),

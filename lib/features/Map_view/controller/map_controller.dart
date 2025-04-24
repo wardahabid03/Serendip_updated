@@ -1,23 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:serendip/features/Map_view/Layers/ad_layer.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Import shared_preferences
 import '../Layers/map_layer.dart';
 import '../Layers/trips_layer.dart';
 import '../Layers/review_layer.dart';
+
 
 class MapController extends ChangeNotifier {
   GoogleMapController? _controller;
   final Map<String, MapLayer> _layers = {};
   final Set<String> _activeLayers = {};
   TripsLayer _tripsLayer;
-  final ReviewLayer _reviewLayer; // ✅ Add ReviewLayer reference
+  final ReviewLayer _reviewLayer;
+  final AdLayer _adsLayer; // ✅ Add AdsLayer reference
   Circle? _activeTripCircle;
 
-  MapController(this._tripsLayer, this._reviewLayer) {
+  MapController(this._tripsLayer, this._reviewLayer, this._adsLayer) {
     _tripsLayer.addListener(_onLayerChanged);
-    _reviewLayer.addListener(_onLayerChanged); // ✅ Listen for review updates
+    _reviewLayer.addListener(_onLayerChanged);
+    _adsLayer.addListener(_onLayerChanged); // ✅ Listen for ads layer updates
     addLayer('trips_layer', _tripsLayer);
-    addLayer('reviews_layer', _reviewLayer); // ✅ Register ReviewLayer
+    addLayer('reviews_layer', _reviewLayer);
+    addLayer('ads_layer', _adsLayer); // ✅ Register AdsLayer
     _activeLayers.add('trips_layer'); // Enable trips by default
 
     // Load review visibility setting from SharedPreferences
@@ -60,21 +65,25 @@ class MapController extends ChangeNotifier {
     notifyListeners();
   }
 
- void toggleReviewLayer(bool active) {
-  toggleLayer('reviews_layer', active);
-  _reviewLayer.setActive(active); // 👈 Tell the layer to stop returning markers
-}
+  void toggleReviewLayer(bool active) {
+    toggleLayer('reviews_layer', active);
+    _reviewLayer.setActive(active);
+  }
+
+  // Add ADS_LAYER toggle functionality
+  void toggleAdsLayer(bool active) {
+    toggleLayer('ads_layer', active);
+  
+  }
 
   MapLayer? getLayer(String layerId) => _layers[layerId];
 
   void toggleLayer(String layerId, bool active) {
     if (active) {
       _activeLayers.add(layerId);
-
       print("Added $layerId");
     } else {
       _activeLayers.remove(layerId);
-
       print("Removed $layerId");
     }
     notifyListeners();
@@ -191,4 +200,5 @@ class MapController extends ChangeNotifier {
 
   TripsLayer get tripsLayer => _tripsLayer;
   ReviewLayer get reviewLayer => _reviewLayer;
+  AdLayer get adsLayer => _adsLayer; // ✅ Expose the AdsLayer
 }

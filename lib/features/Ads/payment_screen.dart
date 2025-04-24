@@ -1,10 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-  import 'package:cloud_functions/cloud_functions.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:serendip/core/routes.dart';
 import 'dart:convert';
+
+import 'package:serendip/features/Ads/ads_provider.dart';
 
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({Key? key}) : super(key: key);
@@ -28,7 +32,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    final doc =
+        await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final usedTrial = doc.data()?['hasUsedFreeTrial'] ?? false;
 
     setState(() {
@@ -40,69 +45,129 @@ class _PaymentScreenState extends State<PaymentScreen> {
     });
   }
 
+  Future<void> _handlePayment() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
 
+    final now = DateTime.now();
+    Duration planDuration;
 
-Future<void> _handlePayment() async {
-  final uid = FirebaseAuth.instance.currentUser?.uid;
-  if (uid == null) return;
+    if (selectedPlan == 'free') {
+      planDuration = const Duration(days: 7);
 
-  if (selectedPlan == 'free') {
-    await FirebaseFirestore.instance.collection('users').doc(uid).set({
-      'hasUsedFreeTrial': true,
-    }, SetOptions(merge: true));
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'hasUsedFreeTrial': true,
+      }, SetOptions(merge: true));
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Free Trial Activated!')),
+      final adsProvider =
+          Provider.of<BusinessAdsProvider>(context, listen: false);
+
+      await adsProvider.updateUserAdPaymentStatus(
+        userId: uid,
+        paymentPlan: selectedPlan,
+        adStartDate: now,
+        adEndDate: now.add(planDuration),
+      );
+   showDialog(
+  context: context,
+  builder: (context) {
+    return AlertDialog(
+      title: Text('Success'),
+      content: Text('Your ad has been submitted successfully!\nNow people can see your ad according to thier location'),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context); // Close the dialog
+            Navigator.pushNamed(context, AppRoutes.display_ad); // Navigate
+          },
+          child: Text('OK'),
+        ),
+      ],
     );
-    Navigator.pop(context);
-    return;
-  }
+  },
+);
 
-  try {
-    final int amount = selectedPlan == 'monthly' ? 1500 * 100 : 14400 * 100;
-
-    // Call the function via HTTPS (no Auth header)
-    final url = Uri.parse("https://us-central1-fast-kiln-434404-m1.cloudfunctions.net/createPaymentIntent");
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'amount': amount,
-        'currency': 'pkr',
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception('Server returned ${response.statusCode}: ${response.body}');
+      return;
     }
 
-    final responseData = jsonDecode(response.body);
-    final clientSecret = responseData['clientSecret'];
+    try {
+      final int amount = selectedPlan == 'monthly' ? 1500 * 100 : 14400 * 100;
+      planDuration = selectedPlan == 'monthly'
+          ? const Duration(days: 30)
+          : const Duration(days: 365);
 
-    await Stripe.instance.initPaymentSheet(
-      paymentSheetParameters: SetupPaymentSheetParameters(
-        paymentIntentClientSecret: clientSecret,
-        merchantDisplayName: 'Your App',
-      ),
+      // Stripe payment intent
+      final url = Uri.parse(
+          "https://us-central1-fast-kiln-434404-m1.cloudfunctions.net/createPaymentIntent");
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'amount': amount,
+          'currency': 'pkr',
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        throw Exception(
+            'Server returned ${response.statusCode}: ${response.body}');
+      }
+
+      final responseData = jsonDecode(response.body);
+      final clientSecret = responseData['clientSecret'];
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: clientSecret,
+          merchantDisplayName: 'Your App',
+        ),
+      );
+
+      await Stripe.instance.presentPaymentSheet();
+
+      final adsProvider =
+          Provider.of<BusinessAdsProvider>(context, listen: false);
+
+      await adsProvider.updateUserAdPaymentStatus(
+        userId: uid,
+        paymentPlan: selectedPlan,
+        adStartDate: now,
+        adEndDate: now.add(planDuration),
+      );
+
+     
+
+   showDialog(
+  context: context,
+  builder: (context) {
+    return AlertDialog(
+      title: Text('Success'),
+      content: Text('Your ad has been submitted successfully!\nNow people can see your ad according to thier location'),
+      actions: [
+        TextButton(
+          onPressed: () {
+            Navigator.pop(context); // Close the dialog
+            Navigator.pushNamed(context, AppRoutes.display_ad); // Navigate
+          },
+          child: Text('OK'),
+        ),
+      ],
     );
+  },
+);
 
-    await Stripe.instance.presentPaymentSheet();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Payment Successful!')),
-    );
 
-    Navigator.pop(context);
-  } catch (e) {
-    print('Payment failed: ${e.toString()}');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Payment failed: ${e.toString()}')),
-    );
+
+    } catch (e) {
+      print('Payment failed: ${e.toString()}');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Payment failed: ${e.toString()}')),
+      );
+    }
   }
-}
-
 
   Widget _buildPlanCard({
     required String title,
@@ -139,8 +204,7 @@ Future<void> _handlePayment() async {
           children: [
             if (isBestValue)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
                   color: Colors.orangeAccent,

@@ -3,28 +3,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class BusinessAd {
   final String id;
   final String title;
-  final String description;
-  final String cta; // Call to Action
+  final String? description; // Optional
+  final String? cta; // Optional Call to Action
   final GeoPoint location;
   final double? distance; // computed locally
   final String imageUrl;
-  final String ownerId;
-  final DateTime createdAt;
-  final String paymentPlan; // e.g., 'monthly', 'package'
-  final bool isPaymentActive;
+  final String? ownerId; // Optional
+  final DateTime? createdAt; // Optional
+  final String? paymentPlan; // Optional (e.g., 'monthly', 'package')
+  final bool? isPaymentActive; // Optional
 
   BusinessAd({
     required this.id,
     required this.title,
-    required this.description,
-    required this.cta,
+    this.description, // Made optional
+    this.cta, // Made optional
     required this.location,
     this.distance,
     required this.imageUrl,
-    required this.ownerId,
-    required this.createdAt,
-    required this.paymentPlan,
-    required this.isPaymentActive,
+    this.ownerId, // Made optional
+    this.createdAt, // Made optional
+    this.paymentPlan, // Made optional
+    this.isPaymentActive, // Made optional
   });
 
   factory BusinessAd.fromDoc(DocumentSnapshot doc) {
@@ -37,7 +37,7 @@ class BusinessAd {
       location: data['location'],
       imageUrl: data['imageUrl'],
       ownerId: data['ownerId'],
-      createdAt: (data['createdAt'] as Timestamp).toDate(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       paymentPlan: data['paymentPlan'],
       isPaymentActive: data['isPaymentActive'],
     );
@@ -51,7 +51,7 @@ class BusinessAd {
       'location': location,
       'imageUrl': imageUrl,
       'ownerId': ownerId,
-      'createdAt': Timestamp.fromDate(createdAt),
+      'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : null,
       'paymentPlan': paymentPlan,
       'isPaymentActive': isPaymentActive,
     };
