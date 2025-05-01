@@ -1,6 +1,8 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
 import 'package:serendip/models/ads_model.dart';
 
@@ -92,6 +94,46 @@ Future<void> incrementCtaClick(String adId) async {
   });
 }
 
+Future<Map<String, dynamic>?> fetchUserAd(String userId) async {
+  final query = await _adsRef.where('ownerId', isEqualTo: userId).limit(1).get();
+
+  if (query.docs.isNotEmpty) {
+    return {
+      'docId': query.docs.first.id,
+      ...query.docs.first.data(),
+    };
+  }
+  return null;
+}
+
+Future<void> deleteUserAd(String userId) async {
+  final query = await _adsRef.where('ownerId', isEqualTo: userId).limit(1).get();
+
+  if (query.docs.isNotEmpty) {
+    await _adsRef.doc(query.docs.first.id).delete();
+  } else {
+    throw Exception("Ad not found for user $userId");
+  }
+}
+
+Future<void> updateAd({required BusinessAd ad, File? newImageFile}) async {
+  String imageUrl = ad.imageUrl;
+
+  if (newImageFile != null) {
+    final storageRef = FirebaseStorage.instance
+        .ref()
+        .child('ad_images')
+        .child('${ad.id}.jpg');
+    await storageRef.putFile(newImageFile);
+    imageUrl = await storageRef.getDownloadURL();
+  }
+
+  final updatedData = ad.copyWith(imageUrl: imageUrl).toMap();
+  updatedData.removeWhere((key, value) => value == null); // Clean nulls
+
+  await _adsRef.doc(ad.id).update(updatedData);
+  await fetchAds(); // Refresh UI
+}
 
 
   double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {

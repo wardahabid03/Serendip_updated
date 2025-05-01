@@ -9,6 +9,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:serendip/models/trip_model.dart';
 import 'package:serendip/core/utils/geojson_utils.dart';
+import 'package:serendip/services/location_service.dart';
 import 'package:uuid/uuid.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
@@ -108,40 +109,77 @@ class TripProvider with ChangeNotifier {
   }
 
   void startTrip(String tripName, String userId, String description,
-      String privacy, List<String> collaborators, LatLng startLocation) {
-    print("🚀 startTrip() called in TripProvider!");
+    String privacy, List<String> collaborators, LatLng startLocation) async {
+  print("🚀 startTrip() called in TripProvider!");
 
-    _tripPath.clear();
-    _isRecording = true;
+  _tripPath.clear();
+  _isRecording = true;
 
-    if (!collaborators.contains(userId)) {
-      collaborators.add(userId);
+  if (!collaborators.contains(userId)) {
+    collaborators.add(userId);
+  }
+
+  final tripId = const Uuid().v4();
+
+  _currentTrip = TripModel(
+    tripId: tripId,
+    tripName: tripName,
+    userId: userId,
+    description: description,
+    createdAt: DateTime.now(),
+    privacy: privacy,
+    collaborators: collaborators,
+    images: [],
+    tripPath: [],
+    isActive: true,
+  );
+
+  print("📍 Adding first location: $startLocation");
+  _tripPath.add(startLocation);
+  _currentTrip!.tripPath.add(startLocation);
+
+  _saveTripToStorage();
+   await addTripToUser(_currentTrip!.userId, tripId);
+
+    for (String collaboratorId in _currentTrip!.collaborators) {
+      if (collaboratorId != _currentTrip!.userId) {
+        await addTripToUser(collaboratorId, tripId);
+      }
     }
 
-    _currentTrip = TripModel(
-      tripId: const Uuid().v4(),
-      tripName: tripName,
-      userId: userId,
-      description: description,
-      createdAt: DateTime.now(),
-      privacy: privacy,
-      collaborators: collaborators,
-      images: [],
-      tripPath: [],
-      isActive: true,
-    );
 
-    print("📍 Adding first location: $startLocation");
-    _tripPath.add(startLocation);
-    _currentTrip!.tripPath.add(startLocation);
+  // Save trip immediately to Firestore
+  await _firestore.collection('trips').doc(tripId).set(_currentTrip!.toMap());
 
+  // Start periodic saving of trip data
+  _saveTripTimer?.cancel();
+  _saveTripTimer = Timer.periodic(const Duration(minutes: 1), (_) {
     _saveTripToStorage();
+  });
 
-    // Start periodic saving of trip data
-    _saveTripTimer?.cancel();
-    _saveTripTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      _saveTripToStorage();
-    });
+  final mapController = Provider.of<MapController>(
+    navigatorKey.currentState!.overlay!.context,
+    listen: false,
+  );
+
+  mapController.addTripPolyline(_tripPath, "active_trip");
+  mapController.addActiveTripCircle(startLocation);
+
+  notifyListeners();
+  print("🔄 notifyListeners() called after starting trip!");
+}
+
+void addLocation(LatLng location) async {
+  if (_isRecording) {
+    // Check if the current user is the creator of the trip
+    final currentUserId = getCurrentUserId();
+    if (_currentTrip?.userId != currentUserId) {
+      // If the current user is not the creator, do not add the location
+      print("🚫 Current user is not the trip creator. Skipping location.");
+      return;
+    }
+
+    await updateTripPath(location);
 
     final mapController = Provider.of<MapController>(
       navigatorKey.currentState!.overlay!.context,
@@ -149,45 +187,65 @@ class TripProvider with ChangeNotifier {
     );
 
     mapController.addTripPolyline(_tripPath, "active_trip");
-    mapController.addActiveTripCircle(startLocation);
+    mapController.addActiveTripCircle(location);
+  }
+}
 
+
+
+Future<void> checkAndSetActiveCollaborativeTrip() async {
+  final userId = getCurrentUserId();
+  if (userId == null) return;
+
+  final snapshot = await _firestore
+      .collection('trips')
+      .where('collaborators', arrayContains: userId)
+      .where('isActive', isEqualTo: true)
+      .get();
+
+  if (snapshot.docs.isNotEmpty) {
+    final data = snapshot.docs.first.data();
+    final tripId = snapshot.docs.first.id;
+    _currentTrip = TripModel.fromMap(data, tripId);
+    _tripPath = _currentTrip!.tripPath;
+    _isRecording = true;
     notifyListeners();
-    print("🔄 notifyListeners() called after starting trip!");
+
+    print("✅ Collaborative trip loaded: ${_currentTrip!.tripName}");
   }
+}
 
-  void addLocation(LatLng location) {
-    if (_isRecording) {
-      print("📍 New location added: $location");
-      _tripPath.add(location);
-      _currentTrip?.tripPath.add(location);
 
-      _saveTripToStorage();
-
-      final mapController = Provider.of<MapController>(
-        navigatorKey.currentState!.overlay!.context,
-        listen: false,
-      );
-
-      mapController.addTripPolyline(_tripPath, "active_trip");
-      mapController.addActiveTripCircle(location);
-
-      notifyListeners();
-      print("🔄 notifyListeners() called after adding location!");
-    } else {
-      print("⚠️ Tried to add location, but recording is off!");
-    }
-  }
 
 Future<void> captureImage(File imageFile, BuildContext context) async {
+  print("📸 Starting captureImage...");
+
   if (_currentTrip == null) {
     print("⚠️ No active trip to save the image.");
     return;
   }
 
+  final currentUserId = getCurrentUserId();
+  print("👤 Current user ID: $currentUserId");
+
+  if (currentUserId == null) {
+    print("❌ No logged-in user.");
+    return;
+  }
+
+  if (!_currentTrip!.collaborators.contains(currentUserId)) {
+    print("❌ User $currentUserId not authorized to add images to this trip.");
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      const SnackBar(content: Text('You are not a collaborator for this trip.')),
+    );
+    return;
+  }
+
   try {
-    // ✅ Get current location from LocationProvider
+    print("📍 Getting current location...");
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     final LatLng? location = locationProvider.currentLocation;
+    print("📍 Location fetched: ${location?.latitude}, ${location?.longitude}");
 
     if (location == null) {
       print("❌ Current location not available.");
@@ -198,9 +256,14 @@ Future<void> captureImage(File imageFile, BuildContext context) async {
     }
 
     final imageId = const Uuid().v4();
+    print("🆔 Generated image ID: $imageId");
+
     final directory = await getApplicationDocumentsDirectory();
     final savedImagePath = '${directory.path}/$imageId.jpg';
+    print("💾 Saving image to: $savedImagePath");
+
     await imageFile.copy(savedImagePath);
+    print("✅ Image copied to local path");
 
     final uploadData = {
       'imageId': imageId,
@@ -209,11 +272,19 @@ Future<void> captureImage(File imageFile, BuildContext context) async {
       'latitude': location.latitude,
       'longitude': location.longitude,
       'timestamp': DateTime.now().toIso8601String(),
+      'uploadedBy': currentUserId,
     };
 
+    print("📦 Upload data prepared: $uploadData");
+
     _uploadQueue.add(uploadData);
+    print("📥 Added to upload queue. Queue length: ${_uploadQueue.length}");
+
     _saveQueueToPrefs();
+    print("📁 Queue saved to prefs");
+
     _triggerQueueProcessing();
+    print("🚀 Triggered queue processing");
 
     scaffoldMessengerKey.currentState?.showSnackBar(
       const SnackBar(content: Text('Image saved and queued for upload')),
@@ -225,6 +296,7 @@ Future<void> captureImage(File imageFile, BuildContext context) async {
     );
   }
 }
+
 
 
 
@@ -303,14 +375,15 @@ Future<void> _uploadImage(Map<String, dynamic> uploadData, BuildContext context)
         'latitude': uploadData['latitude'],
         'longitude': uploadData['longitude'],
         'timestamp': uploadData['timestamp'],
+        'uploadedBy': uploadData['uploadedBy'],
       });
 
       final tripsLayer = Provider.of<TripsLayer>(context, listen: false);
-      tripsLayer.addImageMarkerFromTripProvider(
+      tripsLayer.addImageMarker(
         uploadData['imageId'],
         LatLng(uploadData['latitude'], uploadData['longitude']),
         imageUrl,
-        context,
+     
       );
 
       _pendingImageUploads.removeWhere((upload) => upload['imageId'] == uploadData['imageId']);
@@ -406,14 +479,7 @@ Future<void> _processPendingUploads() async {
     _saveTripTimer?.cancel();
 
     String tripId = await _saveTripToFirestore();
-    await addTripToUser(_currentTrip!.userId, tripId);
-
-    for (String collaboratorId in _currentTrip!.collaborators) {
-      if (collaboratorId != _currentTrip!.userId) {
-        await addTripToUser(collaboratorId, tripId);
-      }
-    }
-
+   
     // Clear stored trip data
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('current_trip');
@@ -427,6 +493,7 @@ Future<void> _processPendingUploads() async {
     _currentTrip = null;
     notifyListeners();
   }
+
 
   @override
   void dispose() {
@@ -470,6 +537,25 @@ Future<void> _processPendingUploads() async {
       return null;
     }
   }
+
+  Future<void> updateTripPath(LatLng newLocation) async {
+  if (!_isRecording || _currentTrip == null) return;
+
+  _tripPath.add(newLocation);
+  _currentTrip!.tripPath.add(newLocation);
+
+  // Update Firestore in real-time
+  await _firestore.collection('trips').doc(_currentTrip!.tripId).update({
+    'tripPath': _tripPath.map((point) => {
+      'latitude': point.latitude, 
+      'longitude': point.longitude
+    }).toList(),
+    'lastUpdated': FieldValue.serverTimestamp(),
+  });
+
+  notifyListeners();
+}
+
 
   Future<void> fetchTrips(
       {required String userId, required String filter}) async {
@@ -573,12 +659,7 @@ Future<void> _processPendingUploads() async {
           imageSnapshot.data() as Map<String, dynamic>?;
       String imageUrl = imageData?['image_url'] ?? '';
 
-      // Delete image from Firebase Storage
-      // if (imageUrl.isNotEmpty) {
-      //   await _storage.refFromURL(imageUrl).delete();
-      // }
-
-      // Remove image from Firestore
+      
       await imageRef.delete();
 
       print("✅ Image deleted successfully.");

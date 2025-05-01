@@ -189,6 +189,12 @@ class MapController extends ChangeNotifier {
     await prefs.setBool('reviewVisibility', value);
   }
 
+  void clearActiveTripOverlay() {
+  _activeTripCircle = null; // Removes the active trip circle
+  notifyListeners(); // Notify listeners to update the UI
+}
+
+
   @override
   void dispose() {
     for (var layer in _layers.values) {

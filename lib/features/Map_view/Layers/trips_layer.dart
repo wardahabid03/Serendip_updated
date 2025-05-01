@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,18 +10,75 @@ import '../../Trip_Tracking/provider/trip_provider.dart';
 import 'map_layer.dart';
 import 'package:provider/provider.dart';
 
-
 class TripsLayer extends MapLayer {
   final Map<String, Polyline> _tripPolylines = {};
   final Map<String, Marker> _tripMarkers = {};
   final Map<String, Circle> _tripCircles = {};
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   StreamSubscription? _imageStreamSubscription;
+  StreamSubscription? _activeTripsSubscription;
   Timer? _circleAnimationTimer;
+  final userId = FirebaseAuth.instance.currentUser?.uid;
+
+  TripsLayer() {
+    _listenToActiveTrips();
+  }
+
+  void _listenToActiveTrips() {
+    _activeTripsSubscription?.cancel();
+    _activeTripsSubscription = _firestore
+        .collection('trips')
+        .where('isActive', isEqualTo: true)
+        .snapshots()
+        .listen((snapshot) {
+      for (var change in snapshot.docChanges) {
+        final tripData = change.doc.data() as Map<String, dynamic>;
+        if (change.type == DocumentChangeType.added || 
+            change.type == DocumentChangeType.modified) {
+          if (tripData['collaborators']?.contains(userId) ?? false || tripData['user_id'] == userId) {
+            _handleActiveTripUpdate(tripData, change.doc.id);
+          }
+        }
+      }
+    });
+  }
+
+
+  void listenToCollaborativeTrips(String userId) {
+  _activeTripsSubscription?.cancel();
+  _activeTripsSubscription = _firestore
+    .collection('trips')
+    .where('collaborators', arrayContains: userId)
+    .where('isActive', isEqualTo: true)
+    .snapshots()
+    .listen((snapshot) {
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.modified) {
+          final tripData = change.doc.data() as Map<String, dynamic>;
+          _handleActiveTripUpdate(tripData, change.doc.id);
+        }
+      }
+    });
+}
+
+Future<void> _handleActiveTripUpdate(Map<String, dynamic> tripData, String tripId) async {
+  if (tripData['tripPath'] != null) {
+    final List<dynamic> pathData = tripData['tripPath'];
+    final List<LatLng> path = pathData.map((point) => 
+      LatLng(point['latitude'], point['longitude'])
+    ).toList();
+
+    await addTripPolyline(path, tripId);
+    
+    if (tripData['isActive'] == true && path.isNotEmpty) {
+      addRecordingTripEffect(path.last, null);
+    }
+  }
+}
+
 
   @override
-  Set<Marker> getMarkers() {
-    return _tripMarkers.values.toSet();
-  }
+  Set<Marker> getMarkers() => _tripMarkers.values.toSet();
 
   @override
   Set<Polyline> getPolylines() => _tripPolylines.values.toSet();
@@ -30,12 +88,24 @@ class TripsLayer extends MapLayer {
 
   void listenForTripImages(String tripId, BuildContext context) {
     _imageStreamSubscription?.cancel();
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    _imageStreamSubscription = tripProvider.getTripImagesStream(tripId).listen((images) async {
-      for (var image in images) {
-        LatLng location = LatLng(image['latitude'], image['longitude']);
-        String imageUrl = image['imageUrl'];
-        await addImageMarker(context, location, imageUrl);
+    _imageStreamSubscription = _firestore
+        .collection('trips')
+        .doc(tripId)
+        .collection('images')
+        .snapshots()
+        .listen((snapshot) {
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final imageData = change.doc.data()!;
+          final location = LatLng(
+            imageData['latitude'],
+            imageData['longitude'],
+          );
+          addImageMarker(context, location, imageData['image_url']);
+
+
+          print("trup Images");
+        }
       }
     });
   }
@@ -95,173 +165,103 @@ class TripsLayer extends MapLayer {
       icon: startIcon,
     );
 
-    _tripMarkers["end_$tripId"] = Marker(
-      markerId: MarkerId("end_$tripId"),
-      position: path.last,
-      infoWindow: InfoWindow(title: "Trip End"),
-      icon: endIcon,
-    );
+    if (path.length > 1) {
+      _tripMarkers["end_$tripId"] = Marker(
+        markerId: MarkerId("end_$tripId"),
+        position: path.last,
+        infoWindow: InfoWindow(title: "Current Position"),
+        icon: endIcon,
+      );
+    }
 
     notifyListeners();
   }
-Future<void> updateTripPolyline(List<LatLng> path, String tripId, GoogleMapController mapController) async {
-  if (path.isEmpty) return;
 
-  final startIcon = await getCustomIcon("assets/images/pin2.png");
+  Future<void> updateTripPolyline(List<LatLng> path, String tripId, GoogleMapController mapController) async {
+    if (path.isEmpty) return;
 
-  if (_tripPolylines.containsKey(tripId)) {
-    List<LatLng> currentPoints = _tripPolylines[tripId]!.points;
-    if (currentPoints.isNotEmpty) {
-      LatLng lastPoint = currentPoints.last;
-      LatLng newPoint = path.last;
+    final startIcon = await getCustomIcon("assets/images/pin2.png");
 
-      // Animate the movement
-      animatePolylineMovement(lastPoint, newPoint, tripId);
+    _tripPolylines[tripId] = Polyline(
+      polylineId: PolylineId(tripId),
+      points: path,
+      color: Colors.blue,
+      width: 6,
+    );
+
+    _tripMarkers["start_$tripId"] = Marker(
+      markerId: MarkerId("start_$tripId"),
+      position: path.first,
+      infoWindow: InfoWindow(title: "Trip Start"),
+      icon: startIcon,
+    );
+
+    if (path.length > 1) {
+      animatePolylineMovement(path[path.length - 2], path.last, tripId);
     }
+
+    notifyListeners();
   }
 
-  _tripPolylines[tripId] = Polyline(
-    polylineId: PolylineId(tripId),
-    points: path,
-    color: Colors.blue,
-    width: 6,
-  );
+  void animatePolylineMovement(LatLng from, LatLng to, String tripId) {
+    const int steps = 10;
+    const Duration duration = Duration(milliseconds: 500);
+    double latStep = (to.latitude - from.latitude) / steps;
+    double lngStep = (to.longitude - from.longitude) / steps;
+    
+    int count = 0;
+    Timer.periodic(Duration(milliseconds: duration.inMilliseconds ~/ steps), (timer) {
+      if (count >= steps) {
+        timer.cancel();
+        return;
+      }
 
-  _tripMarkers["start_$tripId"] = Marker(
-    markerId: MarkerId("start_$tripId"),
-    position: path.first,
-    infoWindow: InfoWindow(title: "Trip Start"),
-    icon: startIcon,
-  );
+      LatLng intermediatePoint = LatLng(
+        from.latitude + latStep * count,
+        from.longitude + lngStep * count
+      );
+      
+      if (_tripPolylines.containsKey(tripId)) {
+        List<LatLng> updatedPoints = List.from(_tripPolylines[tripId]!.points)
+          ..add(intermediatePoint);
+        _tripPolylines[tripId] = _tripPolylines[tripId]!
+          .copyWith(pointsParam: updatedPoints);
+        notifyListeners();
+      }
 
-  notifyListeners();
-}
+      count++;
+    });
+  }
 
-// Function to animate the polyline movement
-void animatePolylineMovement(LatLng from, LatLng to, String tripId) {
-  const int steps = 10; // Number of animation steps
-  const Duration duration = Duration(milliseconds: 500); // Animation duration
-  double latStep = (to.latitude - from.latitude) / steps;
-  double lngStep = (to.longitude - from.longitude) / steps;
-  
-  int count = 0;
-  Timer.periodic(Duration(milliseconds: duration.inMilliseconds ~/ steps), (timer) {
-    if (count >= steps) {
-      timer.cancel();
-      return;
-    }
+  void addRecordingTripEffect(LatLng position, GoogleMapController? mapController) {
+    String circleId = "recording_trip_circle";
 
-    LatLng intermediatePoint = LatLng(from.latitude + latStep * count, from.longitude + lngStep * count);
-    if (_tripPolylines.containsKey(tripId)) {
-      List<LatLng> updatedPoints = List.from(_tripPolylines[tripId]!.points)..add(intermediatePoint);
-      _tripPolylines[tripId] = _tripPolylines[tripId]!.copyWith(pointsParam: updatedPoints);
-      notifyListeners();
-    }
+    _tripCircles[circleId] = Circle(
+      circleId: CircleId(circleId),
+      center: position,
+      radius: 100,
+      fillColor: tealColor.withOpacity(0.5),
+      strokeColor: Colors.red,
+      strokeWidth: 2,
+    );
 
-    count++;
-  });
-}
-
-
-void _animatePolylineUpdate(LatLng lastPoint, List<LatLng> newPath, String tripId) {
-  List<LatLng> animatedPath = [..._tripPolylines[tripId]?.points ?? []];
-  int index = 0;
-
-  Timer.periodic(Duration(milliseconds: 200), (timer) {
-    if (index < newPath.length) {
-      animatedPath.add(newPath[index]);
-      _tripPolylines[tripId] = _tripPolylines[tripId]!.copyWith(pointsParam: animatedPath);
-      notifyListeners();
-      index++;
-    } else {
-      timer.cancel(); // Stop when all points are added
-    }
-  });
-}
-
-
-void addRecordingTripEffect(LatLng position, GoogleMapController mapController) {
-  String circleId = "recording_trip_circle";
-
-  _tripCircles[circleId] = Circle(
-    circleId: CircleId(circleId),
-    center: position,
-    radius: 100,
-    fillColor: tealColor.withOpacity(0.5),
-    strokeColor: Colors.red,
-    strokeWidth: 2,
-  );
-
-
-  _circleAnimationTimer?.cancel();
-  animateCircleExpansion(circleId);
-  notifyListeners();
-}
-
+    _circleAnimationTimer?.cancel();
+    animateCircleExpansion(circleId);
+    notifyListeners();
+  }
 
   void animateCircleExpansion(String circleId) {
     double radius = 100;
     _circleAnimationTimer = Timer.periodic(Duration(milliseconds: 500), (timer) {
       radius = (radius == 100) ? 80 : 100;
       if (_tripCircles.containsKey(circleId)) {
-        _tripCircles[circleId] = _tripCircles[circleId]!.copyWith(radiusParam: radius);
+        _tripCircles[circleId] = _tripCircles[circleId]!
+          .copyWith(radiusParam: radius);
         notifyListeners();
       } else {
         timer.cancel();
       }
     });
-  }
-
-
-
-
-  void addImageMarkerFromTripProvider(String imageId, LatLng location, String imageUrl, BuildContext context) async {
-
-    print("image kaey");
-  if (_tripMarkers.containsKey(imageId)) return; // Prevent duplicate markers
-
-print("+");
-  try {
-    final BitmapDescriptor customIcon = await CustomMarkerHelper.getCustomMarker(imageUrl);
-
-    print("++");
-    
-    final marker = Marker(
-      markerId: MarkerId(imageId),
-      position: location,
-      icon: customIcon,
-      infoWindow: InfoWindow(title: "Trip Image", snippet: "Tap to view"),
-      onTap: () {
-        showDialog(
-          context: context,
-          builder: (context) => Dialog(
-            child: Image.network(imageUrl,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Center(child: CircularProgressIndicator());
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Icon(Icons.error);
-              },
-            ),
-          ),
-        );
-      },
-    );
- print("+++");
-    _tripMarkers[imageId] = marker;
-    getMarkers();
-    notifyListeners();
-  } catch (e) {
-    print("❌ Error adding image marker: $e");
-  }
-}
-
-
-  void stopRecordingTripEffect() {
-    _circleAnimationTimer?.cancel();
-    _tripCircles.clear();
-    notifyListeners();
   }
 
   @override
@@ -271,9 +271,18 @@ print("+");
     _tripCircles.clear();
     _circleAnimationTimer?.cancel();
     _imageStreamSubscription?.cancel();
+    _activeTripsSubscription?.cancel();
     notifyListeners();
   }
 
   @override
   void onTap(LatLng position) {}
+
+  @override
+  void dispose() {
+    _imageStreamSubscription?.cancel();
+    _activeTripsSubscription?.cancel();
+    _circleAnimationTimer?.cancel();
+    super.dispose();
+  }
 }

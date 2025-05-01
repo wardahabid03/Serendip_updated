@@ -143,12 +143,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: (value) =>
                           _toggleSetting('locationEnabled', value),
                     ),
-                    _buildSwitchTile(
-                      'Show Trip History',
-                      _localToggles['showTrips'] ?? true,
-                      icon: Icons.map,
-                      onChanged: (value) => _toggleSetting('showTrips', value),
-                    ),
+                    // _buildSwitchTile(
+                    //   'Show Trip History',
+                    //   _localToggles['showTrips'] ?? true,
+                    //   icon: Icons.map,
+                    //   onChanged: (value) => _toggleSetting('showTrips', value),
+                    // ),
                     _buildSwitchTile(
                       'Show Reviews on Map',
                       _isReviewVisible,
@@ -156,58 +156,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       onChanged: (value) => _toggleReviewDisplay(value),
                     ),
                   ]),
-                  _buildSection('Notifications', [
-                    _buildSwitchTile(
-                      'Friend Requests',
-                      _localToggles['notifyFriendRequests'] ?? true,
-                      icon: Icons.person_add,
-                      onChanged: (value) =>
-                          _toggleSetting('notifyFriendRequests', value),
-                    ),
-                    _buildSwitchTile(
-                      'Trip Updates',
-                      _localToggles['notifyTripUpdates'] ?? true,
-                      icon: Icons.notifications,
-                      onChanged: (value) =>
-                          _toggleSetting('notifyTripUpdates', value),
-                    ),
-                  ]),
+                  // _buildSection('Notifications', [
+                  //   _buildSwitchTile(
+                  //     'Friend Requests',
+                  //     _localToggles['notifyFriendRequests'] ?? true,
+                  //     icon: Icons.person_add,
+                  //     onChanged: (value) =>
+                  //         _toggleSetting('notifyFriendRequests', value),
+                  //   ),
+                  //   _buildSwitchTile(
+                  //     'Trip Updates',
+                  //     _localToggles['notifyTripUpdates'] ?? true,
+                  //     icon: Icons.notifications,
+                  //     onChanged: (value) =>
+                  //         _toggleSetting('notifyTripUpdates', value),
+                  //   ),
+                  // ]),
                   _buildSection('Business', [
                     _buildSettingsTile(
                       'Represent Your Business',
                       'Submit an ad & call to action',
                       icon: Icons.business_center,
-                      onTap: () {
-                        Navigator.pushNamed(context, '/make_ad');
+                      onTap: () async {
+                        final profileProvider = Provider.of<ProfileProvider>(
+                            context,
+                            listen: false);
+                        final hasAd = await profileProvider
+                            .checkIfUserHasAd(); // Add this method in ProfileProvider
+
+                        if (!mounted) return;
+
+                        if (hasAd) {
+                          Navigator.pushNamed(context,
+                              '/ad_dashboard'); // Navigate to ad dashboard
+                        } else {
+                          Navigator.pushNamed(
+                              context, '/make_ad'); // Navigate to create ad
+                        }
                       },
                     ),
                   ]),
-                  _buildSection('Data & Storage', [
-                    _buildSettingsTile(
-                      'Clear Cache',
-                      'Free up space',
-                      icon: Icons.cleaning_services,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Cache cleared'),
-                              backgroundColor: Colors.green),
-                        );
-                      },
-                    ),
-                    _buildSettingsTile(
-                      'Download Data',
-                      'Get a copy of your data',
-                      icon: Icons.download,
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Download started'),
-                              backgroundColor: Colors.blue),
-                        );
-                      },
-                    ),
-                  ]),
+         
                   const SizedBox(height: 24),
                   Padding(
                     padding: const EdgeInsets.all(16.0),

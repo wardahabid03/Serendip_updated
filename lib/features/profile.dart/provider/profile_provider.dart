@@ -430,4 +430,20 @@ Future<Map<String, dynamic>> fetchUserProfile({String? userId}) async {
     }
   }
 
+
+ Future<bool> checkIfUserHasAd() async {
+  final userId = _auth.currentUser?.uid;
+  if (userId == null) return false;
+
+  final querySnapshot = await FirebaseFirestore.instance
+      .collection('business_ads')
+      .where('ownerId', isEqualTo: userId)
+      .limit(1)
+      .get();
+
+  return querySnapshot.docs.isNotEmpty;
+}
+
+
+
 }

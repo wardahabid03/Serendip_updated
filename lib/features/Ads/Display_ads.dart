@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:serendip/core/constant/colors.dart';
+import 'package:serendip/core/routes.dart';
 import 'package:serendip/core/utils/bottom_nav_bar.dart';
 import 'package:serendip/core/utils/navigator_key.dart';
 import 'package:serendip/features/Ads/ads_provider.dart';
@@ -31,15 +32,13 @@ class _DisplayAdScreenState extends State<DisplayAdScreen> {
   Set<String> _seenImpressions = {};
   Map<String, String> _areaNames = {}; // cache for area names
   static const String ADS_LAYER = 'ads_layer';
-    int _selectedIndex = 2;
+  int _selectedIndex = 2;
 
   @override
   void initState() {
     super.initState();
     _fetchAdsPeriodically();
   }
-
-
 
   void _onNavBarItemSelected(int index) {
     setState(() {
@@ -48,7 +47,6 @@ class _DisplayAdScreenState extends State<DisplayAdScreen> {
     NavigationController.navigateToScreen(context, index);
   }
 
-  
   void _fetchAdsPeriodically() async {
     await _fetchAds();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => _fetchAds());
@@ -120,7 +118,8 @@ class _DisplayAdScreenState extends State<DisplayAdScreen> {
     }
   }
 
-  void _navigateToMap(LatLng destination) {
+  void _navigateToMap(BusinessAd ad) {
+    print('display screen ${ad}');
     final context = navigatorKey.currentState!.context;
     final mapController = Provider.of<MapController>(context, listen: false);
     mapController.toggleLayer(ADS_LAYER, true);
@@ -128,7 +127,7 @@ class _DisplayAdScreenState extends State<DisplayAdScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => MapScreen(
-          adLocation: destination,
+          ad: ad,
         ),
       ),
     );
@@ -145,208 +144,243 @@ class _DisplayAdScreenState extends State<DisplayAdScreen> {
     final ads = context.watch<BusinessAdsProvider>().ads;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Nearby Ads')),
-      body:Stack(
-      children: [
-      
-       ListView.builder(
-        itemCount: ads.length,
-        itemBuilder: (context, index) {
-          final ad = ads[index];
-          final isExpanded = _expanded.length > index && _expanded[index];
-          final areaName = _areaNames[ad.id] ?? 'Loading area...';
-
-          return VisibilityDetector(
-            key: Key('ad-${ad.id}'),
-            onVisibilityChanged: (info) {
-              if (info.visibleFraction > 0.5 &&
-                  !_seenImpressions.contains(ad.id)) {
-                _incrementImpression(ad.id!);
-                _seenImpressions.add(ad.id!);
-              }
+      appBar: AppBar(
+        title: const Text('Nearby Ads'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons
+                .add_business_rounded), // you can choose another icon if you like
+            tooltip: 'Create Ad',
+            onPressed: () {
+              Navigator.pushNamed(
+                  context,
+                  AppRoutes
+                      .settingsscreen); // assuming you have the route defined
             },
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                color: tealColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(20)),
-                        child: SizedBox(
-                          height: 140,
-                          width: double.infinity,
-                          child: Image.network(
-                            ad.imageUrl,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        top: 10,
-                        right: 10,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white70,
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          child: IconButton(
-                            icon: Icon(
-                              isExpanded
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              size: 26,
-                              color: Colors.black87,
-                            ),
-                            onPressed: () => _toggleExpand(index, ad.id!),
-                          ),
-                        ),
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          ListView.builder(
+            itemCount: ads.length,
+            itemBuilder: (context, index) {
+              final ad = ads[index];
+              final isExpanded = _expanded.length > index && _expanded[index];
+              final areaName = _areaNames[ad.id] ?? 'Loading area...';
+
+              return VisibilityDetector(
+                key: Key('ad-${ad.id}'),
+                onVisibilityChanged: (info) {
+                  if (info.visibleFraction > 0.5 &&
+                      !_seenImpressions.contains(ad.id)) {
+                    _incrementImpression(ad.id!);
+                    _seenImpressions.add(ad.id!);
+                  }
+                },
+                child: Container(
+                  margin:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    color: tealColor,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
                       ),
                     ],
                   ),
-                  AnimatedSize(
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeInOut,
-                    child: isExpanded
-                        ? Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(20)),
+                            child: LayoutBuilder(
+                              builder: (context, constraints) {
+                                double width = constraints.maxWidth;
+                                double height =
+                                    width * 3 / 4; // Maintain 4:3 aspect ratio
+
+                                return SizedBox(
+                                  width: width,
+                                  height: height,
+                                  child: Image.network(
+                                    ad.imageUrl,
+                                    fit: BoxFit.cover,
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                          Positioned(
+                            top: 10,
+                            right: 10,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white70,
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              child: IconButton(
+                                icon: Icon(
+                                  isExpanded
+                                      ? Icons.expand_less
+                                      : Icons.expand_more,
+                                  size: 26,
+                                  color: Colors.black87,
+                                ),
+                                onPressed: () => _toggleExpand(index, ad.id!),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOut,
+                        child: isExpanded
+                            ? Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                                child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            ad.title ?? 'Sponsored Ad',
-                                            style: const TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          if (ad.description != null &&
-                                              ad.description!.isNotEmpty)
-                                            Text(
-                                              ad.description!,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.white,
-                                                height: 1.4,
-                                              ),
-                                            ),
-                                          const SizedBox(height: 16),
-                                          Row(
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              const Icon(Icons.location_on,
-                                                  size: 18,
-                                                  color: Colors.redAccent),
-                                              const SizedBox(width: 6),
-                                              Expanded(
-                                                child: Text(
-                                                  areaName,
+                                              Text(
+                                                ad.title ?? 'Sponsored Ad',
+                                                style: const TextStyle(
+                                                  fontSize: 18,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 6),
+                                              if (ad.description != null &&
+                                                  ad.description!.isNotEmpty)
+                                                Text(
+                                                  ad.description!,
                                                   style: const TextStyle(
-                                                    color: Colors.white70,
-                                                    fontSize: 13,
+                                                    fontSize: 14,
+                                                    color: Colors.white,
+                                                    height: 1.4,
                                                   ),
                                                 ),
+                                              const SizedBox(height: 16),
+                                              Row(
+                                                children: [
+                                                  const Icon(Icons.location_on,
+                                                      size: 18,
+                                                      color: Colors.redAccent),
+                                                  const SizedBox(width: 6),
+                                                  Expanded(
+                                                    child: Text(
+                                                      areaName,
+                                                      style: const TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ],
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (ad.cta != null && ad.cta!.isNotEmpty)
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(left: 12),
-                                        child: Column(
-                                          children: [
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
+                                        ),
+                                        if (ad.cta != null &&
+                                            ad.cta!.isNotEmpty)
+                                          Padding(
+                                            padding:
+                                                const EdgeInsets.only(left: 12),
+                                            child: Column(
+                                              children: [
+                                                ElevatedButton(
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
                                                         horizontal: 14,
                                                         vertical: 10),
-                                                backgroundColor: Colors.white,
-                                                foregroundColor: tealColor,
-                                                elevation: 1,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
+                                                    backgroundColor:
+                                                        Colors.white,
+                                                    foregroundColor: tealColor,
+                                                    elevation: 1,
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                    ),
+                                                  ),
+                                                  onPressed: () =>
+                                                      _launchCallToAction(
+                                                          ad.cta!),
+                                                  child:
+                                                      const Text("Contact Now"),
                                                 ),
-                                              ),
-                                              onPressed: () =>
-                                                  _launchCallToAction(ad.cta!),
-                                              child: const Text("Contact Now"),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            ElevatedButton.icon(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.white,
-                                                foregroundColor: tealColor,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
+                                                const SizedBox(height: 8),
+                                                ElevatedButton.icon(
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.white,
+                                                    foregroundColor: tealColor,
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
                                                         horizontal: 12,
                                                         vertical: 10),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius:
-                                                      BorderRadius.circular(12),
+                                                    shape:
+                                                        RoundedRectangleBorder(
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                    ),
+                                                  ),
+                                                  onPressed: () =>
+                                                      _navigateToMap(ad),
+                                                  label:
+                                                      const Text('View on Map'),
                                                 ),
-                                              ),
-                                              onPressed: () => _navigateToMap(
-                                                LatLng(ad.location!.latitude,
-                                                    ad.location!.longitude),
-                                              ),
-                                              label: const Text('View on Map'),
+                                              ],
                                             ),
-                                          ],
-                                        ),
-                                      ),
+                                          ),
+                                      ],
+                                    ),
                                   ],
                                 ),
-                                ],
-                            ),
-                          )
-                        : const SizedBox.shrink(),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ],
                   ),
-                ],
-               ),
-              ),
-            );
-          },
-        ),
-
-        // Bottom navigation bar correctly positioned
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: CustomBottomNavBar(
-            selectedIndex: _selectedIndex,
-            onItemSelected: _onNavBarItemSelected,
+                ),
+              );
+            },
           ),
-        ),
-      ],
-    ),
-  );
-}
+
+          // Bottom navigation bar correctly positioned
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: CustomBottomNavBar(
+              selectedIndex: _selectedIndex,
+              onItemSelected: _onNavBarItemSelected,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

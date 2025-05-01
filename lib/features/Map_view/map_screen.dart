@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -28,6 +29,7 @@ import '../Social_Media/friend_request/friend_request_provider.dart';
 import '../Social_Media/friend_request/friend_request_screen.dart';
 import '../chat/chat_provider.dart';
 import '../chat/contacts_screen.dart';
+import '../profile.dart/provider/profile_provider.dart';
 import '../recomendation_system/widgets/place_details_bottom_sheet.dart';
 import '../recomendation_system/widgets/place_list.dart';
 import '../../core/utils/bottom_nav_bar.dart';
@@ -38,8 +40,10 @@ import 'Layers/ad_layer.dart';
 
 class MapScreen extends StatefulWidget {
   final TripModel? trip;
-    final LatLng? adLocation; // Add this parameter
-  const MapScreen({Key? key, this.trip,this.adLocation}) : super(key: key);
+  final BusinessAd? ad;
+
+const MapScreen({Key? key, this.trip, this.ad}) : super(key: key);
+
   @override
   _MapScreenState createState() => _MapScreenState();
 }
@@ -64,19 +68,26 @@ class _MapScreenState extends State<MapScreen> with WidgetsBindingObserver {
     static const String FRIENDS_LAYER = 'friends_layer';
   int _selectedIndex = 0;
   String _selectedTripFilter = "My Trips";
-
+ bool _isCameraIconVisible = false;
  static const String ADS_LAYER = 'ads_layer';
+ bool _isCollaborationActive = false;
+late StreamSubscription _collaborativeTripSub;
 
 @override
 void initState() {
   super.initState();
   WidgetsBinding.instance.addObserver(this);
-  WidgetsBinding.instance.addPostFrameCallback((_) {
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
     _initializeLayers();
     _checkActiveTrip();
-    if (widget.adLocation != null) {
+ WidgetsBinding.instance.addPostFrameCallback((_) {
+    _listenToCollaborativeTrips();
+  });
+
+   final tripProvider = Provider.of<TripProvider>(context, listen: false);
+await tripProvider.checkAndSetActiveCollaborativeTrip();
       _setupAdRoute();
-    }
+   
   });
   _getUserLocation();
   Provider.of<ChatProvider>(context, listen: false).listenForUnreadMessages();
@@ -86,44 +97,113 @@ void initState() {
       _displayTrip(widget.trip!);
     });
   }
+
+
+
+  
 }
 
+
+
+void _listenToCollaborativeTrips() {
+  final userId = Provider.of<ProfileProvider>(context, listen: false).currentUserId;
+  final mapController = Provider.of<MapController>(context, listen: false);
+
+  print("Listening for collaborative trips for user: $userId");
+
+  _collaborativeTripSub = FirebaseFirestore.instance
+    .collection('trips')
+    .where('collaborators', arrayContains: userId)
+    .where('isActive', isEqualTo: true)
+    .snapshots()
+    .listen((snapshot) {
+      if (snapshot.docs.isNotEmpty) {
+        print("Collaborative trip found! Document count: ${snapshot.docs.length}");
+
+        final tripData = snapshot.docs.first.data();
+        print("Collaborative trip data: ${tripData}");
+        _isCollaborationActive = true;
+setState(() {
+  
+        print("Collab ${_isCollaborationActive}");
+  
+});
+
+        _displayCollaborativeTrip(tripData);
+     
+
+        if (mounted) {
+          print("Displaying snackbar alert for collaborative trip.");
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('A collaborator started a trip that includes you!'),
+              duration: Duration(seconds: 4),
+            ),
+          );
+        }
+      } else {
+        print("No collaborative trips found for user $userId.");
+
+          setState(() {
+            mapController.tripsLayer.clear();
+             });
+            _isCollaborationActive = false;
+           setState((){
+
+           });
+            print('remove UI');
+          
+         
+     
+      }
+    });
+}
+
+
+
+
 void _setupAdRoute() async {
+
+  print('map screen setting ad ${widget.ad!}');
+
   final mapController = Provider.of<MapController>(context, listen: false);
   final adLayer = mapController.getLayer(ADS_LAYER) as AdLayer;
   
-  // Set user location
+  // Set user's current location
   adLayer.setUserLocation(_userLocation);
-  
-  // Add ad marker and draw route
+
+  // Tell AdLayer about the ad
   await adLayer.setAds([
     BusinessAd(
       id: 'target-ad',
       location: GeoPoint(
-        widget.adLocation!.latitude,
-        widget.adLocation!.longitude,
+        widget.ad!.location.latitude,
+        widget.ad!.location.longitude,
       ),
-      imageUrl: 'https://via.placeholder.com/50', // Default marker image
-      title: 'Destination',
-      description: 'Your selected destination',
+      imageUrl: '', // <-- Empty imageUrl = no image = bouncing default marker
+      title: widget.ad!.title,
+      description: widget.ad!.description,
     ),
   ]);
 
-  // Move camera to show both points
+  // Move camera to show both user and ad location
   final bounds = LatLngBounds(
     southwest: LatLng(
-      min(_userLocation.latitude, widget.adLocation!.latitude),
-      min(_userLocation.longitude, widget.adLocation!.longitude),
+      min(_userLocation.latitude, widget.ad!.location.latitude),
+      min(_userLocation.longitude, widget.ad!.location.longitude),
     ),
     northeast: LatLng(
-      max(_userLocation.latitude, widget.adLocation!.latitude),
-      max(_userLocation.longitude, widget.adLocation!.longitude),
+      max(_userLocation.latitude, widget.ad!.location.latitude),
+      max(_userLocation.longitude, widget.ad!.location.longitude),
     ),
   );
 
   mapController.controller?.animateCamera(
+
     CameraUpdate.newLatLngBounds(bounds, 100),
+    
   );
+      print('animating Camera');
 }
 
 // void _initializeLayers() {
@@ -141,6 +221,7 @@ void _setupAdRoute() async {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+     _collaborativeTripSub.cancel();
     super.dispose();
   }
 
@@ -173,33 +254,143 @@ void _setupAdRoute() async {
 
 
   Future<void> _checkActiveTrip() async {
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    setState(() {
-      _isRecordingTrip = tripProvider.isRecording;
-    });
+  final tripProvider = Provider.of<TripProvider>(context, listen: false);
+  final mapController = Provider.of<MapController>(context, listen: false);
+  final locationProvider = Provider.of<LocationProvider>(context, listen: false);
 
-    if (_isRecordingTrip) {
-      // Update UI to show active trip
-      final mapController = Provider.of<MapController>(context, listen: false);
-      final locationProvider =
-          Provider.of<LocationProvider>(context, listen: false);
+  setState(() {
+    _isRecordingTrip = tripProvider.isRecording;
+  });
 
-      if (tripProvider.currentTrip != null &&
-          locationProvider.currentLocation != null) {
-        mapController.addTripPolyline(
-            tripProvider.currentTrip!.tripPath, "active_trip");
-        mapController.addActiveTripCircle(locationProvider.currentLocation!);
-      }
+  // Check if there's an active personal trip
+  if (_isRecordingTrip && tripProvider.currentTrip != null) {
+    if (locationProvider.currentLocation != null) {
+      // Add the polyline for the active personal trip
+      mapController.addTripPolyline(
+          tripProvider.currentTrip!.tripPath, "active_trip");
+      // Add the circle for the user's current location
+      mapController.addActiveTripCircle(locationProvider.currentLocation!);
+    }
 
-      // Show active trip notification
+    // Show the active personal trip notification
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Trip recording is active'),
+        duration: Duration(seconds: 3),
+      ));
+    }
+  } else {
+    // Check if there is an active collaborative trip
+    final collaborativeTrip = await _checkForCollaborativeTrip();
+
+    if (collaborativeTrip != null) {
+      // Display the collaborative trip as if it’s the user's active trip
+      _displayCollaborativeTrip(collaborativeTrip);
+
+      // Show notification for the collaborative trip
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Trip recording is active'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('You have an active trip in collaboration with others!'),
           duration: Duration(seconds: 3),
+          // action: SnackBarAction(
+          //   label: 'View Trip',
+          //   onPressed: _viewCollaborativeTrip,
+          // ),
         ));
       }
     }
   }
+}
+
+Future<Map<String, dynamic>?> _checkForCollaborativeTrip() async {
+  // Query Firestore for active collaborative trips involving this user
+  final userId = Provider.of<ProfileProvider>(context, listen: false).currentUserId;
+  final tripSnapshot = await FirebaseFirestore.instance
+      .collection('trips')
+      .where('collaborators', arrayContains: userId)
+      .where('isActive', isEqualTo: true)
+      .limit(1)  // Assuming only one active collaborative trip
+      .get();
+
+  if (tripSnapshot.docs.isNotEmpty) {
+    return tripSnapshot.docs.first.data();
+  }
+  return null;
+}
+
+void _displayCollaborativeTrip(Map<String, dynamic> collaborativeTrip) {
+  print("Displaying collaborative trip");
+
+  final mapController = Provider.of<MapController>(context, listen: false);
+  final tripProvider = Provider.of<TripProvider>(context, listen: false);
+
+  try {
+    final geoJson = collaborativeTrip['trip_path'] as Map<String, dynamic>?;
+    if (geoJson == null || geoJson['coordinates'] == null) {
+      print("Invalid trip path");
+      return;
+    }
+
+    final currentTripId = tripProvider.currentTrip?.tripId;
+    if (currentTripId == null) {
+      print("No current trip ID");
+      return;
+    }
+
+    mapController.tripsLayer.listenForTripImages(currentTripId, context);
+
+    final coordinates = geoJson['coordinates'] as List;
+    final List<LatLng> path = coordinates.map((point) {
+      if (point is List && point.length == 2) {
+        final lon = point[0];
+        final lat = point[1];
+        return LatLng(lat, lon);
+      }
+      return LatLng(0, 0);
+    }).toList();
+
+    if (path.isEmpty) {
+      print("Trip path is empty");
+      return;
+    }
+
+    final LatLng cameraTarget = path.first;
+    final LatLng lastLocation = path.last;
+
+  print("''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''");
+    print(cameraTarget);
+
+
+
+    mapController.addTripPolyline(path, "collaborative_trip");
+    mapController.addActiveTripCircle(lastLocation);
+
+mapController.moveCamera(
+          cameraTarget,
+          zoom: 16,
+          tilt: 60, // 3D effect for trip view
+          bearing: 30, // Slight angle for a dynamic view
+        );;
+
+
+    print("Collaborative trip displayed");
+  } catch (e) {
+    print("Error displaying collaborative trip: $e");
+  }
+}
+
+// void _viewCollaborativeTrip() {
+//   // Handle what happens when the user clicks on "View Trip"
+//   // You can navigate to the trip screen or display detailed information
+//   Navigator.push(
+//     context,
+//     MaterialPageRoute(
+//       builder: (context) => TripDetailScreen(
+//         tripId: 'collaborative_trip_id',  // You can pass the trip ID here
+//       ),
+//     ),
+//   );
+// }
 
   void _onNavBarItemSelected(int index) {
     setState(() {
@@ -371,11 +562,11 @@ void _initializeLayers() {
   }
 
   Future<void> _captureAndUploadImage(BuildContext context) async {
-    if (!_isRecordingTrip) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Please start a trip before capturing images')));
-      return;
-    }
+    // if (!_isRecordingTrip) {
+    //   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    //       content: Text('Please start a trip before capturing images')));
+    //   return;
+    // }
 
     try {
       final ImagePicker picker = ImagePicker();
@@ -872,7 +1063,7 @@ void _showAddReviewDialog(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
 
-      if ( _isRecordingTrip)
+      if ( _isRecordingTrip || _isCollaborationActive)
       _styledFab(
         icon: Icons.camera_alt,
         tooltip: 'Capture Image',
@@ -881,8 +1072,8 @@ void _showAddReviewDialog(
       ),
       const SizedBox(height: 6),
       _styledFab(
-        icon: _isRecordingTrip ? Icons.stop : Icons.play_arrow,
-        tooltip: _isRecordingTrip ? 'Stop Trip' : 'Start Trip',
+        icon: _isRecordingTrip || _isCollaborationActive ? Icons.stop : Icons.play_arrow,
+        tooltip: _isRecordingTrip || _isCollaborationActive ? 'Stop Trip' : 'Start Trip',
         onPressed: _toggleTripRecording,
         heroTag: 'fab_1',
       ),
@@ -899,7 +1090,7 @@ void _showAddReviewDialog(
 
           Positioned(
             top: 150,
-            left: 15,
+            right: 10,
             child: FloatingActionButton.small(
               heroTag: 'fab_2',
               onPressed: _clearMap,
