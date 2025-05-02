@@ -143,12 +143,14 @@ setState(() {
         }
       } else {
         print("No collaborative trips found for user $userId.");
-
           setState(() {
             mapController.tripsLayer.clear();
              });
-            _isCollaborationActive = false;
+   
            setState((){
+         _isCollaborationActive = false;
+         _isRecordingTrip = false;
+       
 
            });
             print('remove UI');
