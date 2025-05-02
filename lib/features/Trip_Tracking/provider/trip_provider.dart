@@ -15,6 +15,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'package:geoflutterfire_plus/geoflutterfire_plus.dart';
+
+
 
 import '../../../core/utils/navigator_key.dart';
 import '../../Map_view/Layers/trips_layer.dart';
@@ -66,6 +69,8 @@ class TripProvider with ChangeNotifier {
     _startUploadRetryTimer();
     _checkConnectivity();
   }
+
+
 
   Future<void> _initializeFromStorage() async {
     final prefs = await SharedPreferences.getInstance();
@@ -186,10 +191,29 @@ void addLocation(LatLng location) async {
       listen: false,
     );
 
+  _saveVisitedPoint(location,_currentTrip!.tripId);
     mapController.addTripPolyline(_tripPath, "active_trip");
     mapController.addActiveTripCircle(location);
   }
 }
+
+
+Future<void> _saveVisitedPoint(LatLng location,String tripId) async {
+  // Convert LatLng to GeoPoint
+  final geoPoint = GeoPoint(location.latitude, location.longitude);
+
+  // Create a GeoFirePoint using the GeoPoint
+  final geoFirePoint = GeoFirePoint(geoPoint);
+
+  // Store the GeoFirePoint data in Firestore
+  await FirebaseFirestore.instance.collection('visited_points').add({
+    'geo': geoFirePoint.data,  // GeoFirePoint's data for the 'geo' field
+    'userId': getCurrentUserId(),
+    'tripId': tripId,
+    'timestamp': FieldValue.serverTimestamp(),
+  });
+}
+
 
 
 
@@ -681,3 +705,4 @@ Future<void> _processPendingUploads() async {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 }
+

@@ -658,13 +658,13 @@ Widget _buildTripsSection(Map<String, dynamic> profile) {
               fontWeight: FontWeight.bold,
             ),
           ),
-          if (trips.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                // Navigate to all trips
-              },
-              child: const Text('See All'),
-            ),
+          // if (trips.isNotEmpty)
+          //   TextButton(
+          //     onPressed: () {
+          //       // Navigate to all trips
+          //     },
+          //     child: const Text('See All'),
+          //   ),
         ],
       ),
       const SizedBox(height: 8),
