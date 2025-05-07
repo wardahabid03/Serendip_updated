@@ -45,5 +45,45 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- 🔒 Location Permissions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>We need your location to show your trips and nearby content.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>We use your location even when the app is in the background for trip tracking.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app requires location access always and when in use to record trips and show nearby ads.</string>
+
+	<!-- 📸 Camera and Photo Permissions -->
+	<key>NSCameraUsageDescription</key>
+	<string>We need camera access to let you capture memories and images during trips.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We use your photo library to save and access trip-related images.</string>
+
+	<!-- 🌐 Internet access (optional for non-HTTPS, remove if unnecessary) -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+
+	<!-- 🕒 Background Modes -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+
+	<key>NSCameraUsageDescription</key>
+    <string>This app uses the camera to scan your card for payment.</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>This app uses location for fraud prevention during payment.</string>
+    <key>LSApplicationQueriesSchemes</key>
+    <array>
+      <string>stripe</string>
+    </array>
+
+
 </dict>
 </plist>

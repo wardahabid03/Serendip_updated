@@ -36,6 +36,7 @@ class _FindFriendsPageState extends State<FindFriendsPage> {
     _initializeLayers();
     _getUserLocation();
     searchController.addListener(_onSearchChanged);
+    _findNearbyUsers();
   }
 
   @override

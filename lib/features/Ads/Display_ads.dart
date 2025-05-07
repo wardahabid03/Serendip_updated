@@ -163,8 +163,11 @@ class _DisplayAdScreenState extends State<DisplayAdScreen> {
       body: Stack(
         children: [
           ListView.builder(
+          padding: const EdgeInsets.only(bottom: 120), // Enough to leave space for the nav bar
+            
             itemCount: ads.length,
             itemBuilder: (context, index) {
+              
               final ad = ads[index];
               final isExpanded = _expanded.length > index && _expanded[index];
               final areaName = _areaNames[ad.id] ?? 'Loading area...';

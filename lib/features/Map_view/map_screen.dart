@@ -86,7 +86,9 @@ void initState() {
 
    final tripProvider = Provider.of<TripProvider>(context, listen: false);
 await tripProvider.checkAndSetActiveCollaborativeTrip();
+if(widget.ad != null){
       _setupAdRoute();
+      }
    
   });
   _getUserLocation();
@@ -94,6 +96,7 @@ await tripProvider.checkAndSetActiveCollaborativeTrip();
 
   if (widget.trip != null) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      print("Displaying Trip ${widget.trip}");
       _displayTrip(widget.trip!);
     });
   }
@@ -144,7 +147,7 @@ setState(() {
       } else {
         print("No collaborative trips found for user $userId.");
           setState(() {
-            mapController.tripsLayer.clear();
+            // mapController.tripsLayer.clear();
              });
    
            setState((){
@@ -495,29 +498,51 @@ void _initializeLayers() {
     }
   }
 
-  void _displayTrip(TripModel trip) async {
-    final mapController = Provider.of<MapController>(context, listen: false);
-    final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
+ void _displayTrip(TripModel trip) async {
+  print('--- Displaying Trip: ${trip.tripId} ---');
 
-    if (tripsLayer == null) return;
+  final mapController = Provider.of<MapController>(context, listen: false);
+  final tripsLayer = mapController.getLayer(TRIPS_LAYER) as TripsLayer?;
 
-    tripsLayer.clear();
-    tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
-
-    final tripProvider = Provider.of<TripProvider>(context, listen: false);
-    final images = await tripProvider.fetchTripImages(trip.tripId);
-
-    for (var image in images) {
-      LatLng location = LatLng(image['latitude'], image['longitude']);
-      tripsLayer.addImageMarker(context, location, image['image_url']);
-    }
-
-    if (trip.tripPath.isNotEmpty) {
-      mapController.moveCamera(trip.tripPath.first, zoom: 12);
-    }
-
-    setState(() {});
+  if (tripsLayer == null) {
+    print('TripsLayer is null!');
+    return;
   }
+
+  print('Clearing existing trips...');
+  tripsLayer.clear();
+
+  print('Adding trip polyline with ${trip.tripPath.length} points...');
+  tripsLayer.addTripPolyline(trip.tripPath, trip.tripId);
+
+  final tripProvider = Provider.of<TripProvider>(context, listen: false);
+  print('Fetching images for trip: ${trip.tripId}');
+  final images = await tripProvider.fetchTripImages(trip.tripId);
+  print('Fetched ${images.length} images.');
+
+
+if(images.isNotEmpty){ 
+  for (var image in images) {
+    LatLng location = LatLng(image['latitude'], image['longitude']);
+    print('Adding image marker at ${location.latitude}, ${location.longitude}');
+    tripsLayer.addImageMarker(context, location, image['image_url']);
+  }
+  }
+
+  if (trip.tripPath.isNotEmpty) {
+    print('Moving camera to start of trip: ${trip.tripPath.first}');
+    mapController.moveCamera(trip.tripPath.first, zoom: 12);
+  } else {
+    print('Trip path is empty.');
+  }
+
+  setState(() {
+    print('State updated.');
+  });
+
+  print('--- Trip Display Complete ---');
+}
+
 
   void _clearMap() {
     final mapController = Provider.of<MapController>(context, listen: false);

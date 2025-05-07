@@ -146,7 +146,14 @@ Future<void> _handleActiveTripUpdate(Map<String, dynamic> tripData, String tripI
   }
 
   Future<void> addTripPolyline(List<LatLng> path, String tripId) async {
+
+print("Display Polyline");
+
+
     if (path.isEmpty) return;
+
+
+    print("Trip path not empty");
 
     final startIcon = await getCustomIcon("assets/images/pin2.png");
     final endIcon = await getCustomIcon("assets/images/pin.png");
@@ -173,7 +180,7 @@ Future<void> _handleActiveTripUpdate(Map<String, dynamic> tripData, String tripI
         icon: endIcon,
       );
     }
-
+print("Added polylines and markers");
     notifyListeners();
   }
 
